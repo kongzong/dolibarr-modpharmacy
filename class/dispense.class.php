@@ -30,6 +30,13 @@ dol_include_once('/pharmacy/lib/pharmacy.lib.php');
 dol_include_once('/patient/lib/patient.lib.php');
 
 /**
+ * Sentinel raised inside confirm() when FEFO allocation finds no stock.
+ * The catch block maps it back to the user-facing 'PharmacyErrStockShort'
+ * translated key instead of leaking the internal message.
+ */
+class PharmacyStockShortageException extends RuntimeException {}
+
+/**
  * Class Dispense
  */
 class Dispense
@@ -229,5 +236,419 @@ class Dispense
 		}
 		$this->db->free($resql);
 		return array('total' => $total, 'rows' => $rows);
+	}
+
+	// ------------------------------------------------------------ phase 2: transactions
+
+	/**
+	 * Create a pending sheet from a signed prescription (spec §3.3 step 1).
+	 * Snapshot lines; no stock movement yet. The gate is a conditional check
+	 * for an existing non-returned sheet for the same prescription, inside
+	 * the same transaction as the insert, so double-submits cannot create
+	 * two sheets.
+	 *
+	 * @param	User				$user	Acting user (pharmacy write)
+	 * @param	PrescriptionSheet	$presc	Prescription loaded and issued
+	 * @param	int					$warehouseId	Warehouse rowid (> 0)
+	 * @param	string				$note	Note
+	 * @return	int							1 ok, -2 refused (not issued / already pending), -1 error
+	 */
+	public function createFromPrescription(User $user, PrescriptionSheet $presc, $warehouseId, $note = '')
+	{
+		$this->error = '';
+		$warehouseId = (int) $warehouseId;
+		if ((int) $presc->status !== PRESCRIPTION_STATUS_ISSUED || $presc->id <= 0) {
+			$this->error = 'PharmacyErrNotIssued';
+			return -2;
+		}
+		if ($warehouseId <= 0) {
+			$this->error = 'PharmacyErrWarehouseRequired';
+			return -2;
+		}
+		if (empty($presc->lines)) {
+			$this->error = 'PrescriptionErrNoLines';
+			return -2;
+		}
+
+		$this->db->begin();
+		try {
+			// Lock the prescription row: serializes concurrent creators for
+			// the same prescription and re-checks it is still issued.
+			$resql = $this->db->query("SELECT status FROM ".$this->db->prefix()."prescription WHERE rowid = ".((int) $presc->id)." FOR UPDATE");
+			if (!$resql) {
+				throw new RuntimeException($this->db->lasterror());
+			}
+			$row = $this->db->fetch_object($resql);
+			$this->db->free($resql);
+			if (!$row || (int) $row->status !== PRESCRIPTION_STATUS_ISSUED) {
+				$this->db->rollback();
+				$this->error = 'PharmacyErrNotIssued';
+				return -2;
+			}
+
+			// Gate: only one non-returned sheet per prescription.
+			$resql = $this->db->query("SELECT COUNT(*) as n FROM ".$this->db->prefix()."pharmacy_dispense"
+				." WHERE fk_prescription = ".((int) $presc->id)." AND status <> ".PHARMACY_STATUS_RETURNED);
+			if (!$resql) {
+				throw new RuntimeException($this->db->lasterror());
+			}
+			$pending = (int) $this->db->fetch_object($resql)->n;
+			$this->db->free($resql);
+			if ($pending > 0) {
+				$this->db->rollback();
+				$this->error = 'PharmacyErrAlreadyPending';
+				return -2;
+			}
+
+			$ref = (new PharmacyNumbering($this->db))->nextReference(PharmacyNumbering::prefixFor());
+			$now = dol_now();
+			$sql = "INSERT INTO ".$this->db->prefix()."pharmacy_dispense (entity, ref, fk_prescription, fk_patient, fk_warehouse, status, note, fk_user_creat, date_creation)";
+			$sql .= " VALUES (".((int) $presc->entity).", '".$this->db->escape($ref)."', ".((int) $presc->id).", ".((int) $presc->fk_patient).", ".$warehouseId.", ".PHARMACY_STATUS_PENDING.", '".$this->db->escape($note)."', ".((int) $user->id).", '".$this->db->idate($now)."')";
+			if (!$this->db->query($sql)) {
+				throw new RuntimeException($this->db->lasterror());
+			}
+			$this->id = (int) $this->db->db->insert_id;
+
+			$position = 0;
+			foreach ($presc->lines as $l) {
+				$isStock = !empty($l['fk_product']) ? 1 : 0;
+				$sql = "INSERT INTO ".$this->db->prefix()."pharmacy_dispense_line (fk_dispense, fk_prescription_line, position, fk_product, product_ref, label, qty, qty_unit, is_stock)";
+				$sql .= " VALUES (".$this->id.", 0, ".$position.", ".(!empty($l['fk_product']) ? (int) $l['fk_product'] : 'NULL');
+				$sql .= ", ".($l['product_ref'] !== null ? "'".$this->db->escape($l['product_ref'])."'" : 'NULL');
+				$sql .= ", '".$this->db->escape($l['label'])."'";
+				$sql .= ", ".($l['qty'] !== null ? price2num($l['qty'], 'MS') : 'NULL');
+				$sql .= ", ".($l['qty_unit'] !== null ? "'".$this->db->escape($l['qty_unit'])."'" : 'NULL');
+				$sql .= ", ".$isStock.")";
+				if (!$this->db->query($sql)) {
+					throw new RuntimeException($this->db->lasterror());
+				}
+				$position++;
+			}
+
+			patient_audit($this->db, $presc->fk_patient, 'PHARMACY_CREATE', $user, array('ref' => $ref, 'dispense' => $this->id, 'prescription' => $presc->id, 'warehouse' => $warehouseId));
+			$this->db->commit();
+		} catch (Throwable $e) {
+			while (property_exists($this->db, 'transaction_opened') && $this->db->transaction_opened > 0) {
+				$this->db->rollback();
+			}
+			$this->error = $e->getMessage();
+			dol_syslog('Dispense::createFromPrescription failed: '.$e->getMessage(), LOG_ERR);
+			return -1;
+		}
+
+		$this->ref = $ref;
+		$this->fk_prescription = (int) $presc->id;
+		$this->fk_patient = (int) $presc->fk_patient;
+		$this->fk_warehouse = $warehouseId;
+		$this->status = PHARMACY_STATUS_PENDING;
+		$this->note = $note;
+		$this->date_creation = $now;
+		$this->lines = array();
+		foreach ($presc->lines as $l) {
+			$this->lines[] = array(
+				'fk_prescription_line' => null,
+				'position' => count($this->lines),
+				'fk_product' => !empty($l['fk_product']) ? (int) $l['fk_product'] : null,
+				'product_ref' => $l['product_ref'],
+				'label' => $l['label'],
+				'qty' => $l['qty'] !== null ? (float) $l['qty'] : null,
+				'qty_unit' => $l['qty_unit'],
+				'is_stock' => !empty($l['fk_product']) ? 1 : 0,
+				'batch_note' => null,
+			);
+		}
+		return 1;
+	}
+
+	/**
+	 * Confirm the dispensing (spec §3.3 step 2): the only place stock moves.
+	 * Idempotency gate = conditional UPDATE status 0 -> 1 (affected rows must
+	 * be 1). FEFO allocation per stock line, one MouvementStock::livraison()
+	 * per batch, then the prescription bridge markDispensed(). Any failure
+	 * rolls the whole transaction back: no partial dispensing.
+	 *
+	 * @param	User	$user	Acting user (pharmacy dispense permission)
+	 * @return	int				1 ok, -2 refused (not pending / prescription changed), -1 error (this->error)
+	 */
+	public function confirm(User $user)
+	{
+		$this->error = '';
+		if ($this->id <= 0 || $this->fetch($this->id) <= 0) {
+			$this->error = 'PharmacyErrNotPending';
+			return -2;
+		}
+		if ((int) $this->status === PHARMACY_STATUS_DISPENSED) {
+			return 1; // idempotent: already dispensed, no stock moves again
+		}
+		if ((int) $this->status !== PHARMACY_STATUS_PENDING) {
+			$this->error = 'PharmacyErrNotPending';
+			return -2;
+		}
+
+		$this->db->begin();
+		try {
+			// Lock the prescription and re-check it is still issued (no
+			// void/create race between our fetch and this transaction).
+			$resql = $this->db->query("SELECT status FROM ".$this->db->prefix()."prescription WHERE rowid = ".((int) $this->fk_prescription)." FOR UPDATE");
+			if (!$resql) {
+				throw new RuntimeException($this->db->lasterror());
+			}
+			$row = $this->db->fetch_object($resql);
+			$this->db->free($resql);
+			if (!$row || (int) $row->status !== PRESCRIPTION_STATUS_ISSUED) {
+				$this->db->rollback();
+				$this->error = 'PharmacyErrNotIssued';
+				return -2;
+			}
+
+			// Idempotency gate: exactly one writer flips 0 -> 1.
+			$sql = "UPDATE ".$this->db->prefix()."pharmacy_dispense SET status = ".PHARMACY_STATUS_DISPENSED.", date_dispense = '".$this->db->idate(dol_now())."', fk_user_dispense = ".((int) $user->id);
+			$sql .= " WHERE rowid = ".((int) $this->id)." AND status = ".PHARMACY_STATUS_PENDING;
+			$resql = $this->db->query($sql);
+			if (!$resql) {
+				throw new RuntimeException($this->db->lasterror());
+			}
+			if ($this->db->affected_rows($resql) < 1) {
+				// A concurrent writer dispensed between our fetch and the gate.
+				$this->db->rollback();
+				$this->status = PHARMACY_STATUS_DISPENSED;
+				return 1;
+			}
+
+			// Stock movements + batch snapshot per stock line (FEFO).
+			require_once DOL_DOCUMENT_ROOT.'/product/stock/class/mouvementstock.class.php';
+			$movement = new MouvementStock($this->db);
+			$stockReservations = array();
+			foreach ($this->lines as $lineKey => $l) {
+				if (!$l['is_stock'] || empty($l['fk_product'])) {
+					continue;
+				}
+				$allocation = $this->allocateFefo((int) $l['fk_product'], (int) $this->fk_warehouse, (float) $l['qty'], $stockReservations);
+				if ($allocation === null) {
+					throw new PharmacyStockShortageException();
+				}
+				$notes = array();
+				foreach ($allocation as $a) {
+					$result = $movement->livraison($user, (int) $l['fk_product'], (int) $this->fk_warehouse, $a['qty'], 0, 'Dispense '.$this->ref, dol_now(), $a['eatby'], $a['sellby'], $a['batch']);
+					if ($result < 0) {
+						throw new RuntimeException('stock movement failed: '.$movement->error);
+					}
+					$notes[] = $a['batch'].($a['sellby'] ? '/'.dol_print_date($a['sellby'], 'day') : '');
+					$stockReservations[$a['batch']] = (isset($stockReservations[$a['batch']]) ? $stockReservations[$a['batch']] : 0) + $a['qty'];
+				}
+				$sql = "UPDATE ".$this->db->prefix()."pharmacy_dispense_line SET batch_note = '".$this->db->escape(implode(', ', $notes))."'";
+				$sql .= " WHERE fk_dispense = ".((int) $this->id)." AND position = ".$lineKey;
+				if (!$this->db->query($sql)) {
+					throw new RuntimeException($this->db->lasterror());
+				}
+				$this->lines[$lineKey]['batch_note'] = implode(', ', $notes);
+			}
+
+			// Prescription bridge: issued -> dispensed (same transaction;
+			// nested begin/commit are depth-counted by DoliDB).
+			$presc = new PrescriptionSheet($this->db);
+			if ($presc->fetch($this->fk_prescription) <= 0) {
+				throw new RuntimeException('prescription not found');
+			}
+			$bridge = $presc->markDispensed($user, array('dispense' => $this->ref));
+			if ($bridge === -2) {
+				$this->error = 'PharmacyErrNotIssued';
+				throw new RuntimeException('prescription bridge refused');
+			}
+			if ($bridge < 0) {
+				throw new RuntimeException('prescription bridge failed');
+			}
+
+			patient_audit($this->db, $this->fk_patient, 'PHARMACY_DISPENSE', $user, array('ref' => $this->ref, 'dispense' => $this->id, 'prescription' => $this->fk_prescription, 'lines' => count($this->lines)));
+			$this->db->commit();
+		} catch (Throwable $e) {
+			while (property_exists($this->db, 'transaction_opened') && $this->db->transaction_opened > 0) {
+				$this->db->rollback();
+			}
+			$this->error = $e instanceof PharmacyStockShortageException ? 'PharmacyErrStockShort' : $e->getMessage();
+			dol_syslog('Dispense::confirm failed: '.$e->getMessage(), LOG_ERR);
+			return -1;
+		}
+
+		$this->status = PHARMACY_STATUS_DISPENSED;
+		$this->date_dispense = dol_now();
+		$this->fk_user_dispense = (int) $user->id;
+		return 1;
+	}
+
+	/**
+	 * FEFO allocation for one product in one warehouse: batches by sell-by
+	 * date ascending (no-date lots last), quantity per batch capped by what
+	 * is still needed. Rows are locked FOR UPDATE inside the caller's
+	 * transaction. Returns null when stock is insufficient (fail-closed).
+	 *
+	 * @param	int		$fkProduct	Product rowid
+	 * @param	int		$warehouseId	Warehouse rowid
+	 * @param	float	$qtyNeeded	Quantity to allocate
+	 * @param	array	$inMemory	Batch reservations already booked by earlier
+	 * 								lines of the same sheet (productbatch rows are
+	 * 								committed at the outer transaction's end, so
+	 * 								they are invisible to later SELECTs).
+	 * @return	array<int,array{rowid:int,batch:string,eatby:int,sellby:int,qty:float}>|null
+	 * 								Allocation or null on shortage
+	 */
+	private function allocateFefo($fkProduct, $warehouseId, $qtyNeeded, array $inMemory = array())
+	{
+		// Total stock available for this product/warehouse. Inside the
+		// confirm() transaction product_stock.reel already reflects the
+		// decrement made by earlier lines' MouvementStock::livraison()
+		// calls (core always writes it, even with productbatch disabled).
+		// The inMemory reservations are only used to cap the FEFO batch
+		// allocation itself (product_batch rows are not updated when
+		// productbatch is disabled), so do NOT subtract them from reel.
+		$sqlReel = "SELECT reel FROM ".$this->db->prefix()."product_stock"
+			." WHERE fk_product = ".((int) $fkProduct)." AND fk_entrepot = ".((int) $warehouseId)." LIMIT 1";
+		$resReel = $this->db->query($sqlReel);
+		if (!$resReel) {
+			throw new RuntimeException($this->db->lasterror());
+		}
+		$reelObj = $this->db->fetch_object($resReel);
+		$this->db->free($resReel);
+		$reel = $reelObj && $reelObj->reel !== null ? (float) $reelObj->reel : 0.0;
+		if ($reel < $qtyNeeded - 0.0000001) {
+			return null; // shortage: the whole sheet fails
+		}
+
+		// FEFO allocation: batches in sell-by order (no-date lots last),
+		// capped by remaining needed and by each batch's current qty minus
+		// what earlier lines of this same sheet already reserved (batch rows
+		// are authoritative only when productbatch is enabled, so track
+		// in-memory reservations regardless of that setting).
+		$sql = "SELECT pb.rowid, pb.batch, pl.eatby, pl.sellby, pb.qty";
+		$sql .= " FROM ".$this->db->prefix()."product_batch as pb";
+		$sql .= " INNER JOIN ".$this->db->prefix()."product_stock as ps ON ps.rowid = pb.fk_product_stock";
+		$sql .= " INNER JOIN ".$this->db->prefix()."product_lot as pl ON pl.fk_product = ps.fk_product AND pl.batch = pb.batch";
+		$sql .= " WHERE ps.fk_product = ".((int) $fkProduct)." AND ps.fk_entrepot = ".((int) $warehouseId)." AND pb.qty > 0";
+		$sql .= " ORDER BY (pl.sellby IS NULL) ASC, pl.sellby ASC, (pl.eatby IS NULL) ASC, pl.eatby ASC, pb.batch ASC";
+		$sql .= " FOR UPDATE";
+		$resql = $this->db->query($sql);
+		if (!$resql) {
+			throw new RuntimeException($this->db->lasterror());
+		}
+		$allocation = array();
+		$remaining = (float) $qtyNeeded;
+		while ($o = $this->db->fetch_object($resql)) {
+			if ($remaining <= 0) {
+				break;
+			}
+			$batchKey = $o->batch;
+			$reserved = 0.0;
+			if (isset($inMemory[$batchKey])) {
+				$reserved = (float) $inMemory[$batchKey];
+			}
+			$batchAvailable = (float) $o->qty - $reserved;
+			if ($batchAvailable <= 0) {
+				continue;
+			}
+			$take = min($batchAvailable, $remaining);
+			$allocation[] = array('rowid' => (int) $o->rowid, 'batch' => $o->batch, 'eatby' => $o->eatby ? (int) $o->eatby : 0, 'sellby' => $o->sellby ? (int) $o->sellby : 0, 'qty' => $take);
+			$remaining -= $take;
+		}
+		$this->db->free($resql);
+		if ($remaining > 0.0000001) {
+			return null; // batch rows can't cover the need (data inconsistency)
+		}
+		return $allocation;
+	}
+
+	/**
+	 * Return a dispensed sheet (spec §3.3 step 3): reverse stock per
+	 * batch_note, mark the prescription issued again, keep the sheet as
+	 * status 9 with the mandatory reason. Nothing deleted.
+	 *
+	 * @param	User	$user	Acting user (pharmacy return permission)
+	 * @param	string	$reason	Reason (required)
+	 * @return	int				1 ok, -2 refused, -1 error
+	 */
+	public function returnSheet(User $user, $reason)
+	{
+		$this->error = '';
+		$reason = trim((string) $reason);
+		if ($this->id <= 0 || $this->fetch($this->id) <= 0) {
+			$this->error = 'PharmacyErrNotDispensed';
+			return -2;
+		}
+		if ((int) $this->status !== PHARMACY_STATUS_DISPENSED) {
+			$this->error = 'PharmacyErrNotDispensed';
+			return -2;
+		}
+		if ($reason === '') {
+			$this->error = 'PharmacyErrReturnReasonRequired';
+			return -1;
+		}
+
+		$this->db->begin();
+		try {
+			// Gate: exactly one writer flips 1 -> 9.
+			$sql = "UPDATE ".$this->db->prefix()."pharmacy_dispense SET status = ".PHARMACY_STATUS_RETURNED.", return_reason = '".$this->db->escape(dol_substr($reason, 0, 255))."'";
+			$sql .= " WHERE rowid = ".((int) $this->id)." AND status = ".PHARMACY_STATUS_DISPENSED;
+			$resql = $this->db->query($sql);
+			if (!$resql) {
+				throw new RuntimeException($this->db->lasterror());
+			}
+			if ($this->db->affected_rows($resql) < 1) {
+				$this->db->rollback();
+				$this->error = 'PharmacyErrNotDispensed';
+				return -2;
+			}
+
+			// Authoritative allocation: the outbound movements this sheet
+			// created (label = 'Dispense {ref}'), grouped by product/batch.
+			$sql = "SELECT fk_product, batch, eatby, sellby, SUM(-value) as qty";
+			$sql .= " FROM ".$this->db->prefix()."stock_mouvement";
+			$sql .= " WHERE label = 'Dispense ".$this->db->escape($this->ref)."' AND type_mouvement = 2 AND batch <> ''";
+			$sql .= " GROUP BY fk_product, batch, eatby, sellby";
+			$resql = $this->db->query($sql);
+			if (!$resql) {
+				throw new RuntimeException($this->db->lasterror());
+			}
+			$movementTotals = array();
+			while ($o = $this->db->fetch_object($resql)) {
+				$movementTotals[] = $o;
+			}
+			$this->db->free($resql);
+
+			require_once DOL_DOCUMENT_ROOT.'/product/stock/class/mouvementstock.class.php';
+			$movement = new MouvementStock($this->db);
+			foreach ($movementTotals as $t) {
+				$result = $movement->reception($user, (int) $t->fk_product, (int) $this->fk_warehouse, (float) $t->qty, 0, 'Return '.$this->ref, (int) $t->eatby, (int) $t->sellby, $t->batch);
+				if ($result < 0) {
+					throw new RuntimeException('reverse stock movement failed: '.$movement->error);
+				}
+			}
+
+			// Prescription bridge: dispensed -> issued again (nested tx).
+			$presc = new PrescriptionSheet($this->db);
+			if ($presc->fetch($this->fk_prescription) <= 0) {
+				throw new RuntimeException('prescription not found');
+			}
+			$bridge = $presc->markDispenseUndone($user, $reason, array('dispense' => $this->ref));
+			if ($bridge === -2) {
+				$this->error = 'PharmacyErrNotDispensed';
+				throw new RuntimeException('prescription bridge refused');
+			}
+			if ($bridge < 0) {
+				throw new RuntimeException('prescription bridge failed');
+			}
+
+			patient_audit($this->db, $this->fk_patient, 'PHARMACY_RETURN', $user, array('ref' => $this->ref, 'dispense' => $this->id, 'prescription' => $this->fk_prescription, 'reason' => dol_substr($reason, 0, 100)));
+			$this->db->commit();
+		} catch (Throwable $e) {
+			while (property_exists($this->db, 'transaction_opened') && $this->db->transaction_opened > 0) {
+				$this->db->rollback();
+			}
+			$this->error = $e->getMessage();
+			dol_syslog('Dispense::returnSheet failed: '.$e->getMessage(), LOG_ERR);
+			return -1;
+		}
+
+		$this->status = PHARMACY_STATUS_RETURNED;
+		$this->return_reason = $reason;
+		return 1;
 	}
 }
