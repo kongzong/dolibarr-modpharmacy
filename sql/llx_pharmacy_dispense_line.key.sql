@@ -1,0 +1,1 @@
+ALTER TABLE llx_pharmacy_dispense_line ADD INDEX idx_pharmacy_dispense_line_prescline (fk_prescription_line);

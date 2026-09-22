@@ -1,0 +1,75 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        php-version: ['7.4', '8.1', '8.3']
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php-version }}
+          extensions: mbstring
+
+      - name: Syntax check
+        run: find . -path ./.git -prune -o -name "*.php" -print | xargs -n1 php -l
+
+      - name: Unit tests
+        run: php tests/run_all.php
+
+  numbering-integration:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        php-version: ['7.4', '8.3']
+    env:
+      DOLIBARR_DOCUMENT_ROOT: ${{ github.workspace }}/.dolibarr-core/htdocs
+      PHARMACY_TEST_DB_HOST: 127.0.0.1
+      PHARMACY_TEST_DB_PORT: 3306
+      PHARMACY_TEST_DB_NAME: pharmacy_test
+      PHARMACY_TEST_DB_USER: pharmacy_test
+      PHARMACY_TEST_DB_PASSWORD: integration-test-only
+    services:
+      mariadb:
+        image: mariadb:10.6
+        env:
+          MARIADB_ROOT_PASSWORD: integration-root-only
+          MARIADB_DATABASE: pharmacy_test
+          MARIADB_USER: pharmacy_test
+          MARIADB_PASSWORD: integration-test-only
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping --silent"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Checkout Dolibarr core (DoliDB driver only)
+        uses: actions/checkout@v4
+        with:
+          repository: Dolibarr/dolibarr
+          ref: '22.0.4'
+          path: .dolibarr-core
+          persist-credentials: false
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php-version }}
+          extensions: mbstring, mysqli
+
+      - name: Concurrent dispense numbering
+        run: php tests/integration/numbering.php
