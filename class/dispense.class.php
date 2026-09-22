@@ -39,7 +39,7 @@ class PharmacyStockShortageException extends RuntimeException {}
 /**
  * Class Dispense
  */
-class Dispense
+class Dispense extends CommonObject
 {
 	/** @var string Element type (for hooks / REST) */
 	public $element = 'dispense';
@@ -69,6 +69,8 @@ class Dispense
 	/** @var string */
 	public $note;
 	public $model_pdf;
+	/** @var string Relative path of the last generated PDF, filled by generateDocument */
+	public $last_main_doc;
 	/** @var int */
 	public $fk_user_creat;
 	/** @var int Unix timestamp */
@@ -77,6 +79,13 @@ class Dispense
 	public $warehouse_label;
 	/** @var string Prescription ref filled on fetch */
 	public $presc_ref;
+
+	/** @var string Patient name filled on fetch */
+	public $patient_name;
+	/** @var string Patient card no filled on fetch */
+	public $card_no;
+	/** @var string Dispatcher full name filled by preparePdfContext */
+	public $dispenser_name = '';
 
 	/**
 	 * Dispensed lines: {fk_prescription_line, position, fk_product,
@@ -87,9 +96,6 @@ class Dispense
 
 	/** @var string Last error (translated key or db error) */
 	public $error = '';
-
-	/** @var DoliDB */
-	private $db;
 
 	/**
 	 * @param DoliDB $db Database handler
@@ -106,7 +112,7 @@ class Dispense
 	public function fetch($id)
 	{
 		$sql = "SELECT d.rowid, d.entity, d.ref, d.fk_prescription, d.fk_patient, d.fk_warehouse, d.status,";
-		$sql .= " d.date_dispense, d.fk_user_dispense, d.return_reason, d.note, d.model_pdf, d.fk_user_creat, d.date_creation,";
+		$sql .= " d.date_dispense, d.fk_user_dispense, d.return_reason, d.note, d.model_pdf, d.last_main_doc, d.fk_user_creat, d.date_creation,";
 		$sql .= " w.lieu as warehouse_lieu, w.label as warehouse_label, p.ref as presc_ref";
 		$sql .= " FROM ".$this->db->prefix()."pharmacy_dispense as d";
 		$sql .= " LEFT JOIN ".$this->db->prefix()."entrepot as w ON w.rowid = d.fk_warehouse";
@@ -134,6 +140,7 @@ class Dispense
 		$this->return_reason = (string) $obj->return_reason;
 		$this->note = (string) $obj->note;
 		$this->model_pdf = (string) $obj->model_pdf;
+		$this->last_main_doc = isset($obj->last_main_doc) ? (string) $obj->last_main_doc : '';
 		$this->fk_user_creat = (int) $obj->fk_user_creat;
 		$this->date_creation = $this->db->jdate($obj->date_creation);
 		$this->warehouse_label = trim((string) $obj->warehouse_lieu.(empty($obj->warehouse_label) ? '' : ' - '.$obj->warehouse_label));
@@ -473,7 +480,82 @@ class Dispense
 		$this->status = PHARMACY_STATUS_DISPENSED;
 		$this->date_dispense = dol_now();
 		$this->fk_user_dispense = (int) $user->id;
+
+		// Auto-generate the dispense sheet PDF (spec §3.3 step 2). A failure
+		// here must not fail the dispensing itself: stock has already moved
+		// and committed, the PDF is a view artifact the user can regenerate
+		// from the pdf.php page.
+		$this->generateDocument();
 		return 1;
+	}
+
+	// ------------------------------------------------------------ phase 3: PDF
+
+	/**
+	 * Load patient summary + dispenser name for the PDF (spec §3.6 header).
+	 *
+	 * @return	void
+	 */
+	private function preparePdfContext()
+	{
+		$summary = patient_get_summary($this->db, $this->fk_patient);
+		if (is_array($summary)) {
+			$this->patient_name = isset($summary['name']) ? $summary['name'] : '';
+			$this->card_no = isset($summary['card_no']) ? $summary['card_no'] : '';
+		}
+		$this->dispenser_name = '';
+		if (!empty($this->fk_user_dispense)) {
+			require_once DOL_DOCUMENT_ROOT.'/user/class/user.class.php';
+			$u = new User($this->db);
+			if ($u->fetch($this->fk_user_dispense) > 0) {
+				$this->dispenser_name = trim($u->lastname.' '.$u->firstname);
+				if ($this->dispenser_name === '') {
+					$this->dispenser_name = $u->login;
+				}
+			}
+		}
+	}
+
+	/**
+	 * Build the dispense-sheet PDF (model 'fy') through the core generator
+	 * lookup (module_parts['models'] = 1, mirroring modPrescription).
+	 *
+	 * @param	Translate|null	$outputlangs	Lang
+	 * @return	int							1 ok, <0 error (this->error set)
+	 */
+	public function generateDocument($outputlangs = null)
+	{
+		global $conf, $langs;
+
+		if (!is_object($outputlangs)) {
+			$outputlangs = $langs;
+		}
+		if (empty($conf->pharmacy->dir_output)) {
+			$this->error = 'PHARMACY_OUTPUTDIR undefined (module not enabled?)';
+			return -1;
+		}
+
+		$this->preparePdfContext();
+		$this->model_pdf = 'fy';
+
+		// The PDF view is a derived artifact; a failure here must not fail
+		// the dispensing itself (stock has already moved and committed).
+		$result = $this->commonGenerateDocument('core/modules/pharmacy/doc/', 'fy', $outputlangs, 0, 0, 0, null);
+		if ($result <= 0) {
+			dol_syslog('Dispense::generateDocument failed for '.$this->ref.': '.(is_array($this->errors) ? implode(' / ', $this->errors) : (string) $this->error), LOG_ERR);
+			return -1;
+		}
+		return 1;
+	}
+
+	/**
+	 * @return	string	Absolute path of the PDF file (may not exist yet)
+	 */
+	public function pdfPath()
+	{
+		global $conf;
+		$ref = dol_sanitizeFileName($this->ref);
+		return (empty($conf->pharmacy->dir_output) ? '' : $conf->pharmacy->dir_output).'/'.$ref.'/'.$ref.'.pdf';
 	}
 
 	/**

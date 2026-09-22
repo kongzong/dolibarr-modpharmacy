@@ -17,6 +17,7 @@ CREATE TABLE llx_pharmacy_dispense(
 	return_reason		varchar(255) DEFAULT NULL,
 	note				text DEFAULT NULL,
 	model_pdf			varchar(255) DEFAULT NULL,
+	last_main_doc		varchar(255) DEFAULT NULL,
 	fk_user_creat		integer DEFAULT NULL,
 	date_creation		datetime NOT NULL,
 	tms					timestamp DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP

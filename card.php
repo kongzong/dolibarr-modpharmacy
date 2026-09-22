@@ -268,6 +268,9 @@ if ((int) $dao->status === PHARMACY_STATUS_PENDING && $user->hasRight('pharmacy'
 if ((int) $dao->status === PHARMACY_STATUS_DISPENSED && $user->hasRight('pharmacy', 'return')) {
 	print dolGetButtonAction($langs->trans("PharmacyReturn"), '', 'delete', $_SERVER["PHP_SELF"].'?id='.$dao->id.'&action=return&token='.newToken(), '', 1);
 }
+if ((int) $dao->status !== PHARMACY_STATUS_PENDING) {
+	print dolGetButtonAction($langs->trans("PharmacyPdf"), '', 'primary', dol_buildpath('/pharmacy/pdf.php', 1).'?id='.$dao->id, '', 0);
+}
 print '</div>';
 
 if ($action == 'return' && (int) $dao->status === PHARMACY_STATUS_DISPENSED && $user->hasRight('pharmacy', 'return')) {

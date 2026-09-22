@@ -33,6 +33,7 @@ function dol_syslog($message, $level = 0, $indent = 0) {}
 function getDolGlobalString($key, $default = '') { return $default; }
 function getDolGlobalInt($key, $default = 0) { return $default; }
 
+require_once DOL_DOCUMENT_ROOT.'/core/class/commonobject.class.php';
 require_once DOL_DOCUMENT_ROOT.'/core/db/mysqli.class.php';
 if (!function_exists('dol_include_once')) {
 	function dol_include_once($relpath) {

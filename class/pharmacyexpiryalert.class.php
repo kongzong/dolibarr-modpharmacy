@@ -132,17 +132,54 @@ class PharmacyExpiryAlert
 		foreach (array_slice($rows, 0, 20) as $r) {
 			$isExpired = ($r['sellby'] > 0 && $r['sellby'] < dol_now());
 			$expired += $isExpired ? 1 : 0;
-			$lines[] = $r['product'].' '.$r['batch'].' '.dol_print_date($r['sellby'] ?: $r['eatby'], 'dayformatter').' '.price2num($r['qty'], 'MS').($isExpired ? ' ['.$this->db->escape('expired').']' : '');
+			$lines[] = $r['product'].' '.$r['batch'].' '.dol_print_date($r['sellby'] ?: $r['eatby'], 'day').($isExpired ? ' [已过期]' : '');
 		}
 		$text = "药品效期预警: 共 ".count($rows)." 条（过期 ".$expired."），前 20 条:\n".implode("\n", $lines);
 
-		dol_include_once('/wecom/lib/wecom.lib.php');
-		if (function_exists('wecom_send_user_text')) {
-			foreach ($recipients as $login) {
-				// Internal alert to configured staff; content carries no patient data
-				wecom_send_user_text($this->db, $login, $text);
+		// Internal alert to configured staff; content carries no patient data
+		// (spec §7.G) — product / batch / expiry only. The login is resolved
+		// to a WeCom user id via llx_wecom_user_map; a missing mapping is a
+		// no-op (never block the cron on a mis-mapped recipient).
+		dol_include_once('/wecom/class/wecomapi.class.php');
+		$api = new WeComApi($this->db);
+		foreach ($recipients as $login) {
+			$wecomUserId = $this->wecomUserIdByLogin($login);
+			if ($wecomUserId === null) {
+				dol_syslog('PharmacyExpiryAlert: no WeCom user mapping for login '.$login, LOG_WARNING);
+				continue;
+			}
+			try {
+				$api->sendApplicationMessage($wecomUserId, $text);
+			} catch (Exception $e) {
+				// The cron must not fail the whole run on one bad recipient.
+				dol_syslog('PharmacyExpiryAlert: WeCom push to '.$login.' failed: '.$e->getMessage(), LOG_ERR);
 			}
 		}
 		return 1;
+	}
+
+	/**
+	 * Resolve a Dolibarr login to its WeCom user id (or null when the login
+	 * has no active WeCom user mapping, spec §5.7: the push only reaches
+	 * users who explicitly joined WeCom through modWeCom).
+	 *
+	 * @param	string	$login		Dolibarr user login
+	 * @return	string|null			WeCom user id or null
+	 */
+	private function wecomUserIdByLogin($login)
+	{
+		global $conf;
+
+		$sql = "SELECT m.wecom_userid FROM ".$this->db->prefix()."user as u";
+		$sql .= " INNER JOIN ".$this->db->prefix()."wecom_user_map as m ON m.fk_user = u.rowid AND m.entity = ".((int) $conf->entity)." AND m.status = 1";
+		$sql .= " WHERE u.login = '".$this->db->escape($login)."' AND u.rowid > 0 LIMIT 1";
+		$resql = $this->db->query($sql);
+		if (!$resql) {
+			dol_syslog('PharmacyExpiryAlert: could not look up WeCom user mapping for '.$login.': '.$this->db->lasterror(), LOG_ERR);
+			return null;
+		}
+		$obj = $this->db->fetch_object($resql);
+		$this->db->free($resql);
+		return $obj ? (string) $obj->wecom_userid : null;
 	}
 }
