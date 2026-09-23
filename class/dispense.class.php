@@ -113,7 +113,7 @@ class Dispense extends CommonObject
 	{
 		$sql = "SELECT d.rowid, d.entity, d.ref, d.fk_prescription, d.fk_patient, d.fk_warehouse, d.status,";
 		$sql .= " d.date_dispense, d.fk_user_dispense, d.return_reason, d.note, d.model_pdf, d.last_main_doc, d.fk_user_creat, d.date_creation,";
-		$sql .= " w.lieu as warehouse_lieu, w.label as warehouse_label, p.ref as presc_ref";
+		$sql .= " w.lieu as warehouse_lieu, w.ref as warehouse_label, p.ref as presc_ref";
 		$sql .= " FROM ".$this->db->prefix()."pharmacy_dispense as d";
 		$sql .= " LEFT JOIN ".$this->db->prefix()."entrepot as w ON w.rowid = d.fk_warehouse";
 		$sql .= " LEFT JOIN ".$this->db->prefix()."prescription as p ON p.rowid = d.fk_prescription";
@@ -227,7 +227,7 @@ class Dispense extends CommonObject
 
 		$sql = "SELECT d.rowid, d.ref, d.fk_prescription, d.fk_patient, d.fk_warehouse, d.status, d.date_creation,";
 		$sql .= " p.ref as presc_ref, pp.card_no, s.nom as patient_name,";
-		$sql .= " CONCAT_WS(' - ', w.lieu, w.label) as warehouse_label";
+		$sql .= " CONCAT_WS(' - ', w.lieu, w.ref) as warehouse_label";
 		$sql .= $from.$where;
 		$sql .= $this->db->order('d.rowid', 'DESC');
 		$sql .= $this->db->plimit((int) $limit, (int) $offset);

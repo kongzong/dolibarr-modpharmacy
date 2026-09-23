@@ -70,13 +70,13 @@ function pharmacy_status_badge($status)
 function pharmacy_warehouse_options($db)
 {
 	$out = array();
-	$sql = "SELECT w.rowid, w.lieu, w.label FROM ".$db->prefix()."entrepot as w";
+	$sql = "SELECT w.rowid, w.lieu, w.ref FROM ".$db->prefix()."entrepot as w";
 	$sql .= " WHERE w.entity IN (".getEntity('stock').") AND w.statut = 1";
 	$sql .= $db->order('lieu', 'ASC');
 	$resql = $db->query($sql);
 	if ($resql) {
 		while ($o = $db->fetch_object($resql)) {
-			$out[(int) $o->rowid] = trim((string) $o->lieu.(empty($o->label) ? '' : ' - '.$o->label));
+			$out[(int) $o->rowid] = trim((string) $o->lieu.(empty($o->ref) ? '' : ' - '.$o->ref));
 		}
 		$db->free($resql);
 	}
@@ -94,8 +94,9 @@ function pharmacy_warehouse_options($db)
 function pharmacy_list_by_prescription($db, $fkPrescription)
 {
 	$out = array();
-	$sql = "SELECT d.rowid, d.ref, d.status, d.date_dispense, d.date_creation, d.fk_warehouse";
+	$sql = "SELECT d.rowid, d.ref, d.status, d.date_dispense, d.date_creation, d.fk_warehouse, w.ref as warehouse_label";
 	$sql .= " FROM ".$db->prefix()."pharmacy_dispense as d";
+	$sql .= " LEFT JOIN ".$db->prefix()."entrepot as w ON w.rowid = d.fk_warehouse";
 	$sql .= " WHERE d.fk_prescription = ".((int) $fkPrescription)." AND d.status <> ".PHARMACY_STATUS_RETURNED;
 	$sql .= $db->order('d.rowid', 'DESC');
 	$resql = $db->query($sql);

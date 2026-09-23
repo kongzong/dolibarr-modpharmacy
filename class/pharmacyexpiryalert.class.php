@@ -60,7 +60,7 @@ class PharmacyExpiryAlert
 		$limitTs = dol_time_plus_duree(dol_now(), $windowDays, 'd');
 
 		$sql = "SELECT prod.label as product_label, prod.ref as product_ref, pb.batch, pl.sellby, pl.eatby, pb.qty,";
-		$sql .= " w.lieu as warehouse_lieu, w.label as warehouse_label";
+		$sql .= " w.lieu as warehouse_lieu, w.ref as warehouse_label";
 		$sql .= " FROM ".$this->db->prefix()."product_lot as pl";
 		$sql .= " INNER JOIN ".$this->db->prefix()."product_batch as pb ON pb.batch = pl.batch";
 		$sql .= " INNER JOIN ".$this->db->prefix()."product_stock as ps ON ps.rowid = pb.fk_product_stock";
