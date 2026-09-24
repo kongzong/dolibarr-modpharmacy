@@ -37,6 +37,15 @@ dol_include_once('/patient/lib/patient.lib.php');
 class PharmacyStockShortageException extends RuntimeException {}
 
 /**
+ * Sentinel raised inside confirm() when a stock line's product has
+ * tobatch=0 (batch management not enabled). Per the 2026-09-24 design
+ * consensus, dispensing requires batch-managed products; this gives a
+ * clear error instead of allocateFefo() mis-reporting "stock shortage"
+ * when only the batch rows are missing.
+ */
+class PharmacyNoBatchException extends RuntimeException {}
+
+/**
  * Class Dispense
  */
 class Dispense extends CommonObject
@@ -214,6 +223,9 @@ class Dispense extends CommonObject
 		}
 		if (!empty($f['to'])) {
 			$where .= " AND d.date_creation <= '".$this->db->idate((int) $f['to'])."'";
+		}
+		if (!empty($f['fk_patient'])) {
+			$where .= " AND d.fk_patient = ".((int) $f['fk_patient']);
 		}
 
 		$sql = "SELECT COUNT(*) as n".$from.$where;
@@ -430,7 +442,20 @@ class Dispense extends CommonObject
 				if (!$l['is_stock'] || empty($l['fk_product'])) {
 					continue;
 				}
-				$allocation = $this->allocateFefo((int) $l['fk_product'], (int) $this->fk_warehouse, (float) $l['qty'], $stockReservations);
+				// 药品出库强制批次（设计共识 2026-09-24）：未启用批次管理的产品显式拦截，
+			// 避免 allocateFefo 因查不到批次行而误报“库存不足”。
+			$sqlB = "SELECT tobatch FROM ".$this->db->prefix()."product WHERE rowid = ".((int) $l['fk_product']);
+			$resB = $this->db->query($sqlB);
+			if (!$resB) {
+				throw new RuntimeException($this->db->lasterror());
+			}
+			$objB = $this->db->fetch_object($resB);
+			$this->db->free($resB);
+			if (!$objB || empty($objB->tobatch)) {
+				throw new PharmacyNoBatchException($l['label']);
+			}
+
+			$allocation = $this->allocateFefo((int) $l['fk_product'], (int) $this->fk_warehouse, (float) $l['qty'], $stockReservations);
 				if ($allocation === null) {
 					throw new PharmacyStockShortageException();
 				}
@@ -472,7 +497,7 @@ class Dispense extends CommonObject
 			while (property_exists($this->db, 'transaction_opened') && $this->db->transaction_opened > 0) {
 				$this->db->rollback();
 			}
-			$this->error = $e instanceof PharmacyStockShortageException ? 'PharmacyErrStockShort' : $e->getMessage();
+			$this->error = $e instanceof PharmacyNoBatchException ? 'PharmacyErrNoBatch' : ($e instanceof PharmacyStockShortageException ? 'PharmacyErrStockShort' : $e->getMessage());
 			dol_syslog('Dispense::confirm failed: '.$e->getMessage(), LOG_ERR);
 			return -1;
 		}
@@ -605,7 +630,7 @@ class Dispense extends CommonObject
 		$sql .= " FROM ".$this->db->prefix()."product_batch as pb";
 		$sql .= " INNER JOIN ".$this->db->prefix()."product_stock as ps ON ps.rowid = pb.fk_product_stock";
 		$sql .= " INNER JOIN ".$this->db->prefix()."product_lot as pl ON pl.fk_product = ps.fk_product AND pl.batch = pb.batch";
-		$sql .= " WHERE ps.fk_product = ".((int) $fkProduct)." AND ps.fk_entrepot = ".((int) $warehouseId)." AND pb.qty > 0";
+		$sql .= " WHERE ps.fk_product = ".((int) $fkProduct)." AND ps.fk_entrepot = ".((int) $warehouseId)." AND pl.entity = ".(int) $this->entity." AND pb.qty > 0";
 		$sql .= " ORDER BY (pl.sellby IS NULL) ASC, pl.sellby ASC, (pl.eatby IS NULL) ASC, pl.eatby ASC, pb.batch ASC";
 		$sql .= " FOR UPDATE";
 		$resql = $this->db->query($sql);
@@ -628,7 +653,7 @@ class Dispense extends CommonObject
 				continue;
 			}
 			$take = min($batchAvailable, $remaining);
-			$allocation[] = array('rowid' => (int) $o->rowid, 'batch' => $o->batch, 'eatby' => $o->eatby ? (int) $o->eatby : 0, 'sellby' => $o->sellby ? (int) $o->sellby : 0, 'qty' => $take);
+			$allocation[] = array('rowid' => (int) $o->rowid, 'batch' => $o->batch, 'eatby' => $o->eatby ? $this->db->jdate($o->eatby) : 0, 'sellby' => $o->sellby ? $this->db->jdate($o->sellby) : 0, 'qty' => $take);
 			$remaining -= $take;
 		}
 		$this->db->free($resql);
@@ -683,7 +708,7 @@ class Dispense extends CommonObject
 			// created (label = 'Dispense {ref}'), grouped by product/batch.
 			$sql = "SELECT fk_product, batch, eatby, sellby, SUM(-value) as qty";
 			$sql .= " FROM ".$this->db->prefix()."stock_mouvement";
-			$sql .= " WHERE label = 'Dispense ".$this->db->escape($this->ref)."' AND type_mouvement = 2 AND batch <> ''";
+			$sql .= " WHERE label = 'Dispense ".$this->db->escape($this->ref)."' AND type_mouvement = 2";
 			$sql .= " GROUP BY fk_product, batch, eatby, sellby";
 			$resql = $this->db->query($sql);
 			if (!$resql) {
@@ -698,7 +723,7 @@ class Dispense extends CommonObject
 			require_once DOL_DOCUMENT_ROOT.'/product/stock/class/mouvementstock.class.php';
 			$movement = new MouvementStock($this->db);
 			foreach ($movementTotals as $t) {
-				$result = $movement->reception($user, (int) $t->fk_product, (int) $this->fk_warehouse, (float) $t->qty, 0, 'Return '.$this->ref, (int) $t->eatby, (int) $t->sellby, $t->batch);
+				$result = $movement->reception($user, (int) $t->fk_product, (int) $this->fk_warehouse, (float) $t->qty, 0, 'Return '.$this->ref, $t->eatby ? $this->db->jdate($t->eatby) : 0, $t->sellby ? $this->db->jdate($t->sellby) : 0, $t->batch);
 				if ($result < 0) {
 					throw new RuntimeException('reverse stock movement failed: '.$movement->error);
 				}
@@ -719,18 +744,23 @@ class Dispense extends CommonObject
 			}
 
 			patient_audit($this->db, $this->fk_patient, 'PHARMACY_RETURN', $user, array('ref' => $this->ref, 'dispense' => $this->id, 'prescription' => $this->fk_prescription, 'reason' => dol_substr($reason, 0, 100)));
-			$this->db->commit();
-		} catch (Throwable $e) {
-			while (property_exists($this->db, 'transaction_opened') && $this->db->transaction_opened > 0) {
-				$this->db->rollback();
-			}
-			$this->error = $e->getMessage();
-			dol_syslog('Dispense::returnSheet failed: '.$e->getMessage(), LOG_ERR);
-			return -1;
+		$this->db->commit();
+	} catch (Throwable $e) {
+		while (property_exists($this->db, 'transaction_opened') && $this->db->transaction_opened > 0) {
+			$this->db->rollback();
 		}
-
-		$this->status = PHARMACY_STATUS_RETURNED;
-		$this->return_reason = $reason;
-		return 1;
+		$this->error = $e->getMessage();
+		dol_syslog('Dispense::returnSheet failed: '.$e->getMessage(), LOG_ERR);
+		return -1;
 	}
+
+	$this->status = PHARMACY_STATUS_RETURNED;
+	$this->return_reason = $reason;
+
+	// Auto-regenerate the dispense sheet PDF so the "已退货" watermark
+	// renders (spec §3.3 step 3). A failure here must not fail the return
+	// itself: stock has already been reversed and committed above.
+	$this->generateDocument();
+	return 1;
+}
 }

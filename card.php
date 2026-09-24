@@ -122,15 +122,8 @@ if ($action == 'create') {
 	exit;
 }
 
-if ($action == 'add' && $confirm != 'yes') {
-	// formconfirm wrapper for create
-	if (!$user->hasRight('pharmacy', 'write')) {
-		accessforbidden();
-	}
-}
-
 // ------------------------------------------------------------ add (create submission)
-if ($action == 'add' && GETPOST('token', 'alpha') != '' && GETPOSTINT('fk_prescription') > 0 && GETPOST('save', 'alpha') !== '' || ($action == 'add' && $confirm == 'yes')) {
+if (($action == 'add' && GETPOST('token', 'alpha') != '' && GETPOSTINT('fk_prescription') > 0 && GETPOST('save', 'alpha') !== '') || ($action == 'add' && $confirm == 'yes' && GETPOST('token', 'alpha') != '')) {
 	if (!$user->hasRight('pharmacy', 'write')) {
 		accessforbidden();
 	}
@@ -195,14 +188,8 @@ if ($action == 'confirm_return' && $id > 0 && $confirm == 'yes') {
 	exit;
 }
 
-if ($id <= 0) {
-	print '<div class="error">'.$langs->trans("NoRecordFound").'</div>';
-	llxFooter();
-	$db->close();
-	exit;
-}
-
-if ($dao->fetch($id) <= 0) {
+if ($id <= 0 || $dao->fetch($id) <= 0) {
+	llxHeader('', $langs->trans("PharmacyDispenseList"));
 	print '<div class="error">'.$langs->trans("NoRecordFound").'</div>';
 	llxFooter();
 	$db->close();
@@ -213,6 +200,8 @@ patient_audit($db, $dao->fk_patient, 'PHARMACY_READ', $user, array('ref' => $dao
 $summary = patient_get_summary($db, $dao->fk_patient);
 $presc = new PrescriptionSheet($db);
 $hasPresc = $presc->fetch($dao->fk_prescription) > 0;
+
+llxHeader('', $langs->trans("PharmacyRef").' '.$dao->ref);
 
 // Patient context bar (navigation convention 2026-09-21: never invent a back
 // button; highlight the tab we are on)
@@ -233,7 +222,7 @@ if ($hasPresc) {
 }
 print '</td></tr>';
 print '<tr><td>'.$langs->trans("PharmacyWarehouse").'</td><td>'.dol_escape_htmltag((string) $dao->warehouse_label).'</td></tr>';
-print '<tr><td>'.$langs->trans("PharmacyDateDispense").'</td><td>'.$dao->date_dispense ? dol_print_date($dao->date_dispense, 'dayhour') : ''.'</td></tr>';
+print '<tr><td>'.$langs->trans("PharmacyDateDispense").'</td><td>'.($dao->date_dispense ? dol_print_date($dao->date_dispense, 'dayhour') : '').'</td></tr>';
 if ((int) $dao->status === PHARMACY_STATUS_RETURNED) {
 	print '<tr><td>'.$langs->trans("PharmacyReturnReason").'</td><td>'.dol_escape_htmltag((string) $dao->return_reason).'</td></tr>';
 }
@@ -269,7 +258,7 @@ if ((int) $dao->status === PHARMACY_STATUS_DISPENSED && $user->hasRight('pharmac
 	print dolGetButtonAction($langs->trans("PharmacyReturn"), '', 'delete', $_SERVER["PHP_SELF"].'?id='.$dao->id.'&action=return&token='.newToken(), '', 1);
 }
 if ((int) $dao->status !== PHARMACY_STATUS_PENDING) {
-	print dolGetButtonAction($langs->trans("PharmacyPdf"), '', 'primary', dol_buildpath('/pharmacy/pdf.php', 1).'?id='.$dao->id, '', 0);
+	print dolGetButtonAction($langs->trans("PharmacyPdf"), '', 'default', dol_buildpath('/pharmacy/pdf.php', 1).'?id='.$dao->id, '', 1, array('attr' => array('target' => '_blank')));
 }
 print '</div>';
 

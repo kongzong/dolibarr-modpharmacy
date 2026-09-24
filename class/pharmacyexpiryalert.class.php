@@ -66,7 +66,7 @@ class PharmacyExpiryAlert
 		$sql .= " INNER JOIN ".$this->db->prefix()."product_stock as ps ON ps.rowid = pb.fk_product_stock";
 		$sql .= " INNER JOIN ".$this->db->prefix()."product as prod ON prod.rowid = ps.fk_product";
 		$sql .= " INNER JOIN ".$this->db->prefix()."entrepot as w ON w.rowid = ps.fk_entrepot AND w.statut = 1";
-		$sql .= " WHERE ps.fk_product = pl.fk_product AND pb.qty > 0";
+		$sql .= " WHERE ps.fk_product = pl.fk_product AND pl.entity IN (".getEntity('product').") AND pb.qty > 0";
 		$sql .= " AND (pl.sellby > 0 AND pl.sellby <= ".$limitTs." OR pl.eatby > 0 AND pl.eatby <= ".$limitTs.")";
 		if ($warehouseId > 0) {
 			$sql .= " AND ps.fk_entrepot = ".((int) $warehouseId);

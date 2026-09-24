@@ -62,11 +62,13 @@ $searchStatus = GETPOST('search_status', 'alpha');
 $status = ($searchStatus !== '' && is_numeric($searchStatus)) ? (int) $searchStatus : -1;
 $dateFrom = dol_mktime(0, 0, 0, GETPOSTINT('search_frommonth'), GETPOSTINT('search_fromday'), GETPOSTINT('search_fromyear'));
 $dateTo = dol_mktime(23, 59, 59, GETPOSTINT('search_tomonth'), GETPOSTINT('search_today'), GETPOSTINT('search_toyear'));
+$searchFkPatient = GETPOSTINT('search_fk_patient');
 if (GETPOST('button_removefilter_x', 'alpha') || GETPOST('button_removefilter', 'alpha')) {
 	$search = '';
 	$status = -1;
 	$dateFrom = '';
 	$dateTo = '';
+	$searchFkPatient = 0;
 }
 
 $limit = GETPOSTINT('limit') > 0 ? GETPOSTINT('limit') : $conf->liste_limit;
@@ -77,7 +79,7 @@ if ($page < 0) {
 $offset = $limit * $page;
 
 $dao = new Dispense($db);
-$result = $dao->search(array('q' => $search, 'status' => $status, 'from' => $dateFrom, 'to' => $dateTo), $limit, $offset);
+$result = $dao->search(array('q' => $search, 'status' => $status, 'from' => $dateFrom, 'to' => $dateTo, 'fk_patient' => $searchFkPatient), $limit, $offset);
 if ($result === null) {
 	dol_print_error($db, $dao->error);
 	exit;
@@ -100,36 +102,54 @@ if ($dateFrom) {
 if ($dateTo) {
 	$param .= '&search_tomonth='.GETPOSTINT('search_tomonth').'&search_today='.GETPOSTINT('search_today').'&search_toyear='.GETPOSTINT('search_toyear');
 }
+if ($searchFkPatient > 0) {
+	$param .= '&search_fk_patient='.(int) $searchFkPatient;
+}
 
 print '<form method="GET" id="searchFormList" action="'.$_SERVER["PHP_SELF"].'">'."\n";
 print '<input type="hidden" name="limit" value="'.(int) $limit.'">';
+if ($searchFkPatient > 0) {
+	print '<input type="hidden" name="search_fk_patient" value="'.(int) $searchFkPatient.'">';
+}
+
+if ($searchFkPatient > 0) {
+	$ps = patient_get_summary($db, $searchFkPatient);
+	$psName = $ps ? $ps['name'] : '';
+	print '<div style="margin-bottom:6px;">';
+	print '<span class="opacitymedium">'.$langs->trans('PharmacyFilterByPatient').'</span> ';
+	print '<a href="'.dol_buildpath('/patient/card.php', 1).'?id='.(int) $searchFkPatient.'">'.dol_escape_htmltag($psName).'</a> ';
+	print '<a href="'.$_SERVER["PHP_SELF"].'?search_fk_patient=0" class="butActionDeleteSmall">'.$langs->trans('ClearFilter').'</a>';
+	print '</div>';
+}
 
 print_barre_liste($langs->trans("PharmacyDispenseList"), $page, $_SERVER["PHP_SELF"], $param, '', '', '', $total, $total, 'fa-pills', 0, '', '', $limit, 0, 0, 1);
 
-$filters = '<div class="liste_titre_filter">';
-$filters .= '<div class="liste_titre_left">';
-$filters .= '<div class="marginrightonly"><input class="flat inputsearch" type="text" name="search" value="'.dol_escape_htmltag($search).'" placeholder="'.$langs->trans('PharmacyRef').' / '.$langs->trans('PrescriptionRef').' / '.$langs->trans('PatientCardNo').'"></div>';
-$filters .= '<div class="marginrightonly"><select class="flat" name="search_status"><option value="-1">&nbsp;</option>';
+$statusOptions = array();
 foreach (array(PHARMACY_STATUS_PENDING, PHARMACY_STATUS_DISPENSED, PHARMACY_STATUS_RETURNED) as $st) {
-	$filters .= '<option value="'.$st.'"'.($status === $st ? ' selected' : '').'>'.pharmacy_status_label($st).'</option>';
+	$statusOptions[(string) $st] = pharmacy_status_label($st);
 }
-$filters .= '</select></div>';
-$filters .= '<div class="marginrightonly">'.$form->selectDate($dateFrom, 'search_from_', 0, 0, 1, '', 1, 0, 0, '', '', '', '', 1, '', $langs->trans("From")).'</div>';
-$filters .= '<div class="marginrightonly">'.$form->selectDate($dateTo, 'search_to_', 0, 0, 1, '', 1, 0, 0, '', '', '', '', 1, '', $langs->trans("To")).'</div>';
-$filters .= '<button type="submit" class="liste_titre_search" name="button_search" value="1">'.$langs->trans("Search").'</button>';
-$filters .= '<button type="submit" class="liste_titre_search" name="button_removefilter" value="1">'.$langs->trans("RemoveFilter").'</button>';
-$filters .= '</div></div>';
-print $filters;
 
-print '<table class="tagtable liste">'."\n";
+print '<div class="div-table-responsive">';
+print '<table class="tagtable liste centpercent">'."\n";
+print '<tr class="liste_titre_filter">';
+print '<td class="liste_titre" colspan="4"><input type="text" name="search" class="minwidth200" placeholder="'.dol_escape_htmltag($langs->trans('PharmacyRef').' / '.$langs->trans('PrescriptionRef').' / '.$langs->trans('PatientCardNo')).'" value="'.dol_escape_htmltag($search).'"></td>';
+print '<td class="liste_titre"></td>';
+print '<td class="liste_titre center">'.$form->selectDate($dateFrom, 'search_from', 0, 0, 1, '', 1, 0).' - '.$form->selectDate($dateTo, 'search_to', 0, 0, 1, '', 1, 0).'</td>';
+print '<td class="liste_titre center">'.$form->selectarray('search_status', $statusOptions, $status >= 0 ? (string) $status : '', 1, 0, 0, '', 0, 0, 0, '', 'maxwidth100').'</td>';
+print '<td class="liste_titre center maxwidthsearch">';
+print '<button type="submit" class="liste_titre button_search reposition" name="button_search" value="x"><span class="fa fa-search"></span></button>';
+print '<button type="submit" class="liste_titre button_removefilter reposition" name="button_removefilter" value="x"><span class="fa fa-remove"></span></button>';
+print '</td></tr>';
+
 print '<tr class="liste_titre">';
-print_liste_field_titre("PharmacyRef", $_SERVER["PHP_SELF"], "d.ref", "", $param, '', $sortfield, $sortorder);
-print_liste_field_titre("PharmacyPrescription", $_SERVER["PHP_SELF"], "p.ref", "", $param, '', $sortfield, $sortorder);
-print_liste_field_titre("PatientCardNo", $_SERVER["PHP_SELF"], "pp.card_no", "", $param, '', $sortfield, $sortorder);
-print_liste_field_titre("ThirdPartyName", $_SERVER["PHP_SELF"], "s.nom", "", $param, '', $sortfield, $sortorder);
-print_liste_field_titre("PharmacyWarehouse", $_SERVER["PHP_SELF"], "d.fk_warehouse", "", $param, '', $sortfield, $sortorder);
-print_liste_field_titre("DateCreation", $_SERVER["PHP_SELF"], "d.date_creation", "", $param, '', $sortfield, $sortorder, 'center ');
-print_liste_field_titre("Status", $_SERVER["PHP_SELF"], "d.status", "", $param, '', $sortfield, $sortorder, 'center ');
+print '<th>'.$langs->trans("PharmacyRef").'</th>';
+print '<th>'.$langs->trans("PharmacyPrescription").'</th>';
+print '<th>'.$langs->trans("PatientCardNo").'</th>';
+print '<th>'.$langs->trans("ThirdPartyName").'</th>';
+print '<th>'.$langs->trans("PharmacyWarehouse").'</th>';
+print '<th class="center">'.$langs->trans("DateCreation").'</th>';
+print '<th class="center">'.$langs->trans("Status").'</th>';
+print '<th></th>';
 print '</tr>'."\n";
 
 if (empty($rows)) {
@@ -138,16 +158,18 @@ if (empty($rows)) {
 
 foreach ($rows as $r) {
 	print '<tr class="oddeven">';
-	print '<td><a href="'.dol_buildpath('/pharmacy/card.php', 1).'?id='.(int) $r->rowid.'">'.dol_escape_htmltag($r->ref).'</a></td>';
+	print '<td><a href="'.dol_buildpath('/pharmacy/card.php', 1).'?id='.(int) $r->rowid.'">'.img_picto('', 'fa-pills', 'class="pictofixedwidth"').dol_escape_htmltag($r->ref).'</a></td>';
 	print '<td><a href="'.dol_buildpath('/prescription/card.php', 1).'?id='.(int) $r->fk_prescription.'">'.dol_escape_htmltag($r->presc_ref).'</a></td>';
 	print '<td>'.dol_escape_htmltag($r->card_no).'</td>';
-	print '<td>'.dol_escape_htmltag($r->patient_name).'</td>';
+	print '<td><a href="'.dol_buildpath('/patient/card.php', 1).'?id='.(int) $r->fk_patient.'">'.dol_escape_htmltag($r->patient_name).'</a></td>';
 	print '<td>'.dol_escape_htmltag($r->warehouse_label !== null ? $r->warehouse_label : '').'</td>';
 	print '<td class="center">'.dol_print_date($db->jdate($r->date_creation), 'dayhour').'</td>';
 	print '<td class="center">'.pharmacy_status_badge($r->status).'</td>';
+	print '<td></td>';
 	print '</tr>';
 }
 print '</table>';
+print '</div>';
 print '</form>';
 
 llxFooter();
