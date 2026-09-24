@@ -227,6 +227,9 @@ class Dispense extends CommonObject
 		if (!empty($f['fk_patient'])) {
 			$where .= " AND d.fk_patient = ".((int) $f['fk_patient']);
 		}
+		if (!empty($f['fk_prescription'])) {
+			$where .= " AND d.fk_prescription = ".((int) $f['fk_prescription']);
+		}
 
 		$sql = "SELECT COUNT(*) as n".$from.$where;
 		$resql = $this->db->query($sql);
