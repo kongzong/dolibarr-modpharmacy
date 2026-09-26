@@ -114,7 +114,10 @@ class modPharmacy extends DolibarrModules
 			$conf->pharmacy->enabled = 0;
 		}
 
+		// Patient card tab: dispensing / return history of this patient
+		// (spec §3.6). Reuses /pharmacy/patient_tab.php.
 		$this->tabs = array();
+		$this->tabs[] = array('data' => 'patient:+dispensing:PharmacyDispenseList:pharmacy@pharmacy:$user->hasRight(\'pharmacy\', \'read\'):/pharmacy/patient_tab.php?id=__ID__');
 
 		$this->boxes = array();
 
@@ -158,6 +161,7 @@ class modPharmacy extends DolibarrModules
 			'titre' => 'PharmacyDispenseList',
 			'mainmenu' => 'clinic',
 			'leftmenu' => 'pharmacy_list',
+			'prefix' => img_picto('', 'fa-pills_fas_#fb8c00', 'class="paddingright pictofixedwidth"'),
 			'url' => '/pharmacy/list.php',
 			'langs' => 'pharmacy@pharmacy',
 			'position' => 1300 + $r,
@@ -172,6 +176,7 @@ class modPharmacy extends DolibarrModules
 			'titre' => 'PharmacyExpiry',
 			'mainmenu' => 'clinic',
 			'leftmenu' => 'pharmacy_expiry',
+			'prefix' => img_picto('', 'fa-hourglass-half_fas_#f9a825', 'class="paddingright pictofixedwidth"'),
 			'url' => '/pharmacy/expiry.php',
 			'langs' => 'pharmacy@pharmacy',
 			'position' => 1300 + $r,

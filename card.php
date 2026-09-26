@@ -249,6 +249,18 @@ foreach ($dao->lines as $i => $l) {
 }
 print '</table></div>';
 
+// Linked charge bill (avoid double-charging the same dispense)
+$billedBillId = 0;
+$sqlBill = "SELECT bl.fk_bill FROM ".$db->prefix()."clinicpay_bill_line as bl WHERE bl.fk_dispense = ".((int) $dao->id)." LIMIT 1";
+$resBill = $db->query($sqlBill);
+if ($resBill) {
+	$objBill = $db->fetch_object($resBill);
+	if ($objBill) {
+		$billedBillId = (int) $objBill->fk_bill;
+	}
+	$db->free($resBill);
+}
+
 // Actions (spec §3.4): confirm = dispense permission, return = return permission
 print '<div class="tabsAction">';
 if ((int) $dao->status === PHARMACY_STATUS_PENDING && $user->hasRight('pharmacy', 'dispense')) {
@@ -256,6 +268,11 @@ if ((int) $dao->status === PHARMACY_STATUS_PENDING && $user->hasRight('pharmacy'
 }
 if ((int) $dao->status === PHARMACY_STATUS_DISPENSED && $user->hasRight('pharmacy', 'return')) {
 	print dolGetButtonAction($langs->trans("PharmacyReturn"), '', 'delete', $_SERVER["PHP_SELF"].'?id='.$dao->id.'&action=return&token='.newToken(), '', 1);
+}
+if ($billedBillId > 0) {
+	print '<span class="opacitymedium">'.$langs->trans("PharmacyAlreadyCharged").'</span> <a href="'.dol_buildpath('/clinicpay/bill.php', 1).'?id='.$billedBillId.'">'.$langs->trans("PharmacyViewBill").'</a>';
+} elseif ((int) $dao->status === PHARMACY_STATUS_DISPENSED && $user->hasRight('clinicpay', 'write')) {
+	print dolGetButtonAction($langs->trans("PharmacyCharge"), '', 'default', dol_buildpath('/clinicpay/bill.php', 1).'?action=create&fk_patient='.$dao->fk_patient.'&fk_dispense='.$dao->id, '', 1);
 }
 if ((int) $dao->status !== PHARMACY_STATUS_PENDING) {
 	print dolGetButtonAction($langs->trans("PharmacyPdf"), '', 'default', dol_buildpath('/pharmacy/pdf.php', 1).'?id='.$dao->id, '', 1, array('attr' => array('target' => '_blank')));

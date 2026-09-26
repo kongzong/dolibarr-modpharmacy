@@ -120,9 +120,12 @@ function pharmacy_list_by_prescription($db, $fkPrescription)
 function pharmacy_list_by_patient($db, $fkPatient, $limit = 50)
 {
 	$out = array();
-	$sql = "SELECT d.rowid, d.ref, d.fk_prescription, d.status, d.date_dispense, d.date_creation, p.ref as presc_ref";
+	$sql = "SELECT d.rowid, d.ref, d.fk_prescription, d.status, d.date_dispense, d.date_creation, p.ref as presc_ref, p.fk_medrecord, m.ref as medrecord_ref";
 	$sql .= " FROM ".$db->prefix()."pharmacy_dispense as d";
 	$sql .= " INNER JOIN ".$db->prefix()."prescription as p ON p.rowid = d.fk_prescription";
+	// Owner visit via the prescription (design §5.1): pharmacy has no direct
+	// fk_medrecord; the prescription is the bridge (dispense requires one).
+	$sql .= " LEFT JOIN ".$db->prefix()."medrecord as m ON m.rowid = p.fk_medrecord";
 	$sql .= " WHERE d.fk_patient = ".((int) $fkPatient);
 	$sql .= $db->order('d.rowid', 'DESC');
 	$sql .= $db->plimit((int) $limit);
