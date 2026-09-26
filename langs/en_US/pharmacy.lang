@@ -72,3 +72,4 @@ PharmacyErrConfirmFailed=Failed to confirm the dispense
 PharmacyAuditDispense=Dispense
 PharmacyAuditReturn=Return
 PharmacyConfirmReturn=Return this dispense sheet? The batches are booked back in and the prescription returns to issued.
+Prescription=Prescription
