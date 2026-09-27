@@ -52,26 +52,34 @@ class PharmacyExpiryAlert
 	 *
 	 * @param	int		$windowDays		Alert window in days
 	 * @param	int		$warehouseId	0 = all open warehouses
-	 * @return	array<int,array{product:string,batch:string,sellby:int,eatby:int,qty:float,warehouse:string}>|null
+	 * @return	array<int,array{fk_product:int,product:string,batch:string,sellby:int,eatby:int,qty:float,fk_entrepot:int,warehouse:string}>|null
 	 */
 	public function collect($windowDays, $warehouseId = 0)
 	{
 		$windowDays = max(0, (int) $windowDays);
 		$limitTs = dol_time_plus_duree(dol_now(), $windowDays, 'd');
+		// product_lot.sellby/eatby are DATE columns: compare against a
+		// 'YYYY-MM-DD' literal. A unix-timestamp integer makes MariaDB fall
+		// back to a string comparison ('2026-10-18' vs '1798...') which
+		// silently matches nothing; dol_print_date() is locale-dependent
+		// (may emit d/m/Y), so format the bound explicitly.
+		$limitDate = date('Y-m-d', (int) $limitTs);
 
-		$sql = "SELECT prod.label as product_label, prod.ref as product_ref, pb.batch, pl.sellby, pl.eatby, pb.qty,";
-		$sql .= " w.lieu as warehouse_lieu, w.ref as warehouse_label";
+		$sql = "SELECT prod.rowid as fk_product, prod.label as product_label, prod.ref as product_ref, pb.batch, pl.sellby, pl.eatby, pb.qty,";
+		$sql .= " w.rowid as fk_entrepot, w.lieu as warehouse_lieu, w.ref as warehouse_label";
 		$sql .= " FROM ".$this->db->prefix()."product_lot as pl";
 		$sql .= " INNER JOIN ".$this->db->prefix()."product_batch as pb ON pb.batch = pl.batch";
 		$sql .= " INNER JOIN ".$this->db->prefix()."product_stock as ps ON ps.rowid = pb.fk_product_stock";
 		$sql .= " INNER JOIN ".$this->db->prefix()."product as prod ON prod.rowid = ps.fk_product";
 		$sql .= " INNER JOIN ".$this->db->prefix()."entrepot as w ON w.rowid = ps.fk_entrepot AND w.statut = 1";
 		$sql .= " WHERE ps.fk_product = pl.fk_product AND pl.entity IN (".getEntity('product').") AND pb.qty > 0";
-		$sql .= " AND (pl.sellby > 0 AND pl.sellby <= ".$limitTs." OR pl.eatby > 0 AND pl.eatby <= ".$limitTs.")";
+		$sql .= " AND ((pl.sellby IS NOT NULL AND pl.sellby <= '".$this->db->escape($limitDate)."')";
+		$sql .= " OR (pl.eatby IS NOT NULL AND pl.eatby <= '".$this->db->escape($limitDate)."'))";
 		if ($warehouseId > 0) {
 			$sql .= " AND ps.fk_entrepot = ".((int) $warehouseId);
 		}
-		$sql .= $this->db->order('pl.sellby', 'ASC');
+		// Effective expiry = sell-by when set, otherwise eat-by; oldest first
+		$sql .= " ORDER BY COALESCE(NULLIF(pl.sellby, 0), pl.eatby, 99999999999) ASC";
 
 		$resql = $this->db->query($sql);
 		if (!$resql) {
@@ -81,11 +89,13 @@ class PharmacyExpiryAlert
 		$rows = array();
 		while ($o = $this->db->fetch_object($resql)) {
 			$rows[] = array(
+				'fk_product' => (int) $o->fk_product,
 				'product' => trim($o->product_label.' ['.$o->product_ref.']'),
 				'batch' => $o->batch,
-				'sellby' => $o->sellby ? (int) $o->sellby : 0,
-				'eatby' => $o->eatby ? (int) $o->eatby : 0,
+				'sellby' => $o->sellby ? (int) strtotime((string) $o->sellby) : 0,
+				'eatby' => $o->eatby ? (int) strtotime((string) $o->eatby) : 0,
 				'qty' => (float) $o->qty,
+				'fk_entrepot' => (int) $o->fk_entrepot,
 				'warehouse' => trim((string) $o->warehouse_lieu.(empty($o->warehouse_label) ? '' : ' - '.$o->warehouse_label)),
 			);
 		}
