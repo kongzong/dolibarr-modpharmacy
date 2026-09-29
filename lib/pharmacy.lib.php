@@ -138,3 +138,126 @@ function pharmacy_list_by_patient($db, $fkPatient, $limit = 50)
 	}
 	return $out;
 }
+
+/**
+ * Run the OTC retail chain for a walk-in customer, one step at a time:
+ * internal OTC prescription -> dispense (+stock, FEFO) -> charge bill (paid).
+ *
+ * Each class owns its own transaction, so a failure leaves the already
+ * created documents in place: $info['partial'] is set and the caller shows
+ * the references so the counter can finish the remaining step by hand. No
+ * stock is ever moved twice for the same cart because each call builds a
+ * fresh prescription.
+ *
+ * @param	DoliDB	$db				Database handler
+ * @param	User	$user			Acting user
+ * @param	array	$cart			Cart lines: {fk_product, qty}
+ * @param	int		$warehouseId	Warehouse to dispense from
+ * @param	string	$channel		Payment channel (CASH|SCAN)
+ * @param	string	$channelRef		Scan reference (required for SCAN)
+ * @param	array	$info			Out: refs/ids of every created document
+ * @return	int						1 ok, -1 walk-in/prescription, -2 issue, -3 dispense, -4 stock, -5 bill, -6 payment
+ */
+function pharmacy_retail_checkout($db, $user, array $cart, $warehouseId, $channel, $channelRef, &$info = array())
+{
+	global $langs;
+
+	$info = array(
+		'error' => '', 'partial' => false,
+		'walkin' => 0, 'prescription' => 0, 'prescription_ref' => '',
+		'dispense' => 0, 'dispense_ref' => '', 'bill' => 0, 'bill_ref' => '',
+	);
+	dol_include_once('/prescription/class/prescriptionsheet.class.php');
+	dol_include_once('/clinicpay/class/paybill.class.php');
+	$langs->load('pharmacy@pharmacy');
+
+	$note = $langs->trans('PharmacyRetailUsageNote');
+
+	$walkin = patient_ensure_walkin($db, $user);
+	if ($walkin <= 0) {
+		$info['error'] = 'PharmacyRetailErrWalkin';
+		return -1;
+	}
+	$info['walkin'] = $walkin;
+
+	// 1. Internal OTC prescription (no doctor, no visit, walk-in patient)
+	$ps = new PrescriptionSheet($db);
+	$ps->presc_type = PRESCRIPTION_TYPE_OTC;
+	$ps->fk_patient = $walkin;
+	$ps->fk_doctor = 0;
+	$ps->fk_medrecord = 0;
+	$ps->date_presc = dol_now();
+	$ps->usage_note = $note;
+	$lines = array();
+	foreach ($cart as $c) {
+		$fkProduct = isset($c['fk_product']) ? (int) $c['fk_product'] : 0;
+		$qty = isset($c['qty']) ? (float) $c['qty'] : 0;
+		if ($fkProduct <= 0 || $qty <= 0) {
+			continue;
+		}
+		$lines[] = array('fk_product' => $fkProduct, 'label' => (string) $c['label'], 'product_ref' => (string) $c['ref'], 'qty' => $qty);
+	}
+	if (empty($lines)) {
+		$info['error'] = 'PharmacyRetailErrEmptyCart';
+		return -1;
+	}
+	$ps->lines = $lines;
+	if ($ps->create($user) <= 0) {
+		$info['error'] = $ps->error ? $ps->error : 'PharmacyRetailErrPrescription';
+		return -1;
+	}
+	$info['prescription'] = (int) $ps->id;
+	$info['prescription_ref'] = $ps->ref;
+
+	// 2. Issue it so the pharmacy module accepts the dispense
+	if ($ps->issue($user) <= 0) {
+		$info['error'] = $ps->error ? $ps->error : 'PharmacyRetailErrIssue';
+		$info['partial'] = true;
+		return -2;
+	}
+
+	// 3. Dispense sheet + confirm (reverse stock movements with FEFO batches)
+	$disp = new Dispense($db);
+	if ($disp->createFromPrescription($user, $ps, (int) $warehouseId, $note) <= 0) {
+		$info['error'] = $disp->error ? $disp->error : 'PharmacyRetailErrDispense';
+		$info['partial'] = true;
+		return -3;
+	}
+	$info['dispense'] = (int) $disp->id;
+	$info['dispense_ref'] = $disp->ref;
+	if ($disp->confirm($user) <= 0) {
+		$info['error'] = $disp->error ? $disp->error : 'PharmacyRetailErrDispenseConfirm';
+		$info['partial'] = true;
+		return -4;
+	}
+
+	// 4. Charge bill, now payable, traced back to the dispense line by line
+	$billLines = array();
+	foreach ($ps->lines as $l) {
+		if (empty($l['fk_product']) || empty($l['qty'])) {
+			continue;
+		}
+		$billLines[] = array(
+			'fk_product' => (int) $l['fk_product'],
+			'qty' => (float) $l['qty'],
+			'fk_prescription' => (int) $ps->id,
+			'fk_dispense' => (int) $disp->id,
+		);
+	}
+	$pb = new Paybill($db);
+	if ($pb->create($user, array('fk_patient' => $walkin, 'lines' => $billLines, 'note' => $note)) <= 0) {
+		$info['error'] = $pb->error ? $pb->error : 'PharmacyRetailErrBill';
+		$info['partial'] = true;
+		return -5;
+	}
+	$info['bill'] = (int) $pb->id;
+	$info['bill_ref'] = $pb->ref;
+
+	// 5. Take the money (native invoice + payment, one transaction)
+	if ($pb->confirm($user, $channel, $channelRef) <= 0) {
+		$info['error'] = $pb->error ? $pb->error : 'PharmacyRetailErrPayment';
+		$info['partial'] = true;
+		return -6;
+	}
+	return 1;
+}

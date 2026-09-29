@@ -185,6 +185,21 @@ class modPharmacy extends DolibarrModules
 			'target' => '',
 			'user' => 2,
 		);
+		$this->menu[$r++] = array(
+			'fk_menu' => 'fk_mainmenu=clinic',
+			'type' => 'left',
+			'titre' => 'PharmacyRetail',
+			'mainmenu' => 'clinic',
+			'leftmenu' => 'pharmacy_retail',
+			'prefix' => img_picto('', 'fa-cash-register_fas_#00897b', 'class="paddingright pictofixedwidth"'),
+			'url' => '/pharmacy/retail.php',
+			'langs' => 'pharmacy@pharmacy',
+			'position' => 1300 + $r,
+			'enabled' => 'isModEnabled("pharmacy")',
+			'perms' => '$user->hasRight("pharmacy", "write")',
+			'target' => '',
+			'user' => 2,
+		);
 	}
 
 	/**

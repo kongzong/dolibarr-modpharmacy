@@ -28,6 +28,7 @@
 dol_include_once('/pharmacy/class/pharmacynumbering.class.php');
 dol_include_once('/pharmacy/lib/pharmacy.lib.php');
 dol_include_once('/patient/lib/patient.lib.php');
+dol_include_once('/prescription/lib/prescription.lib.php');
 
 /**
  * Sentinel raised inside confirm() when FEFO allocation finds no stock.
@@ -292,6 +293,15 @@ class Dispense extends CommonObject
 			return -2;
 		}
 
+		// TCM prescriptions store each line's qty as PER-DOSE grams (the
+		// decoction sheet prints "药名 12g" and the head carries the dose
+		// count separately). A dispense sheet moves real stock, so snapshot
+		// the total: per-dose qty x doses. WM/OTC keep their line qty as-is
+		// (their qty already is the total). Note the guard is on the
+		// prescription type, because legacy WM rows may carry a stray doses
+		// value that must NOT inflate the dispensed quantity.
+		$dosesMult = ($presc->presc_type === PRESCRIPTION_TYPE_TCM && (int) $presc->doses > 1) ? (int) $presc->doses : 1;
+
 		$this->db->begin();
 		try {
 			// Lock the prescription row: serializes concurrent creators for
@@ -334,11 +344,12 @@ class Dispense extends CommonObject
 			$position = 0;
 			foreach ($presc->lines as $l) {
 				$isStock = !empty($l['fk_product']) ? 1 : 0;
+				$lineQty = ($l['qty'] !== null) ? (float) $l['qty'] * $dosesMult : null;
 				$sql = "INSERT INTO ".$this->db->prefix()."pharmacy_dispense_line (fk_dispense, fk_prescription_line, position, fk_product, product_ref, label, qty, qty_unit, is_stock)";
 				$sql .= " VALUES (".$this->id.", 0, ".$position.", ".(!empty($l['fk_product']) ? (int) $l['fk_product'] : 'NULL');
 				$sql .= ", ".($l['product_ref'] !== null ? "'".$this->db->escape($l['product_ref'])."'" : 'NULL');
 				$sql .= ", '".$this->db->escape($l['label'])."'";
-				$sql .= ", ".($l['qty'] !== null ? price2num($l['qty'], 'MS') : 'NULL');
+				$sql .= ", ".($lineQty !== null ? price2num($lineQty, 'MS') : 'NULL');
 				$sql .= ", ".($l['qty_unit'] !== null ? "'".$this->db->escape($l['qty_unit'])."'" : 'NULL');
 				$sql .= ", ".$isStock.")";
 				if (!$this->db->query($sql)) {
@@ -373,7 +384,7 @@ class Dispense extends CommonObject
 				'fk_product' => !empty($l['fk_product']) ? (int) $l['fk_product'] : null,
 				'product_ref' => $l['product_ref'],
 				'label' => $l['label'],
-				'qty' => $l['qty'] !== null ? (float) $l['qty'] : null,
+				'qty' => $l['qty'] !== null ? (float) $l['qty'] * $dosesMult : null,
 				'qty_unit' => $l['qty_unit'],
 				'is_stock' => !empty($l['fk_product']) ? 1 : 0,
 				'batch_note' => null,

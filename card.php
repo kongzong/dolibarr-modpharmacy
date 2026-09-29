@@ -106,11 +106,15 @@ if ($action == 'create') {
 	print '</table>';
 	print '<div class="div-table-responsive-no-min"><table class="noborder centpercent">';
 	print '<tr class="liste_titre"><th>#</th><th>'.$langs->trans("PharmacyLineDrug").'</th><th class="right">'.$langs->trans("PharmacyLineQty").'</th><th>'.$langs->trans("PharmacyLineUnit").'</th></tr>';
+	// TCM lines are per-dose; preview the total that will actually move.
+	$createDosesMult = ($presc->presc_type === PRESCRIPTION_TYPE_TCM && (int) $presc->doses > 1) ? (int) $presc->doses : 1;
 	foreach ($presc->lines as $i => $l) {
+		$lineTotal = ($l['qty'] !== null) ? (float) $l['qty'] * $createDosesMult : null;
+		$doseHint = ($createDosesMult > 1 && $l['qty'] !== null) ? ' <span class="opacitymedium">('.$langs->trans('PharmacyDoseDetail', price2num($l['qty'], 'MS'), dol_escape_htmltag((string) $l['qty_unit']), $createDosesMult).')</span>' : '';
 		print '<tr class="oddeven">';
 		print '<td>'.($i + 1).'</td>';
-		print '<td>'.dol_escape_htmltag($l['label']).'</td>';
-		print '<td class="right">'.($l['qty'] !== null ? price2num($l['qty'], 'MS') : '').'</td>';
+		print '<td>'.dol_escape_htmltag($l['label']).$doseHint.'</td>';
+		print '<td class="right">'.($lineTotal !== null ? price2num($lineTotal, 'MS') : '').'</td>';
 		print '<td>'.dol_escape_htmltag((string) $l['qty_unit']).'</td>';
 		print '</tr>';
 	}
@@ -200,6 +204,9 @@ patient_audit($db, $dao->fk_patient, 'PHARMACY_READ', $user, array('ref' => $dao
 $summary = patient_get_summary($db, $dao->fk_patient);
 $presc = new PrescriptionSheet($db);
 $hasPresc = $presc->fetch($dao->fk_prescription) > 0;
+// TCM sheets move (per-dose grams x doses); show the breakdown next to the
+// already-multiplied dispensed quantity.
+$isTcmMult = ($hasPresc && $presc->presc_type === PRESCRIPTION_TYPE_TCM && (int) $presc->doses > 1);
 
 llxHeader('', $langs->trans("PharmacyRef").' '.$dao->ref);
 
@@ -239,9 +246,13 @@ print '<th class="liste_titre">'.$langs->trans("PharmacyLineUnit").'</th>';
 print '<th class="liste_titre">'.$langs->trans("PharmacyLineBatch").'</th>';
 print '</tr>';
 foreach ($dao->lines as $i => $l) {
+	$doseHint = '';
+	if ($isTcmMult && isset($presc->lines[$i]) && $presc->lines[$i]['qty'] !== null) {
+		$doseHint = ' <span class="opacitymedium">('.$langs->trans('PharmacyDoseDetail', price2num($presc->lines[$i]['qty'], 'MS'), dol_escape_htmltag((string) $presc->lines[$i]['qty_unit']), (int) $presc->doses).')</span>';
+	}
 	print '<tr class="oddeven">';
 	print '<td>'.($i + 1).'</td>';
-	print '<td>'.dol_escape_htmltag($l['label']).'</td>';
+	print '<td>'.dol_escape_htmltag($l['label']).$doseHint.'</td>';
 	print '<td class="right">'.price2num($l['qty'], 'MS').'</td>';
 	print '<td>'.dol_escape_htmltag((string) $l['qty_unit']).'</td>';
 	print '<td>'.($l['is_stock'] ? dol_escape_htmltag((string) $l['batch_note']) : '<span class="opacitymedium">'.$langs->trans("PharmacyLineNonStock").'</span>').'</td>';
