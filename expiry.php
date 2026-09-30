@@ -67,7 +67,7 @@ if ($wid < 0) {
 
 llxHeader('', $langs->trans("PharmacyExpiry"));
 
-print load_fiche_titre($langs->trans("PharmacyExpiry").' <span class="opacitymedium">('.(int) $window.' d)</span>', '', 'fa-hourglass-half');
+print load_fiche_titre($langs->trans("PharmacyExpiry").' <span class="opacitymedium">('.(int) $window.' d)</span>', '<a class="butActionNew" href="'.dol_buildpath('/pharmacy/decant.php', 1).'"><span class="fa fa-box fa-fw valignmiddle"></span>'.$langs->trans("PharmacyDecant").'</a>', 'fa-hourglass-half');
 
 // ---- Warehouse filter (open warehouses only) ----
 $warehouses = array();

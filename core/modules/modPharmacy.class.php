@@ -188,6 +188,21 @@ class modPharmacy extends DolibarrModules
 		$this->menu[$r++] = array(
 			'fk_menu' => 'fk_mainmenu=clinic',
 			'type' => 'left',
+			'titre' => 'PharmacyDecant',
+			'mainmenu' => 'clinic',
+			'leftmenu' => 'pharmacy_decant',
+			'prefix' => img_picto('', 'fa-box_fas_#8d6e63', 'class="paddingright pictofixedwidth"'),
+			'url' => '/pharmacy/decant.php',
+			'langs' => 'pharmacy@pharmacy',
+			'position' => 1300 + $r,
+			'enabled' => 'isModEnabled("pharmacy")',
+			'perms' => '$user->hasRight("pharmacy", "read")',
+			'target' => '',
+			'user' => 2,
+		);
+		$this->menu[$r++] = array(
+			'fk_menu' => 'fk_mainmenu=clinic',
+			'type' => 'left',
 			'titre' => 'PharmacyRetail',
 			'mainmenu' => 'clinic',
 			'leftmenu' => 'pharmacy_retail',

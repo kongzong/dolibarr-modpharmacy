@@ -394,6 +394,68 @@ class Dispense extends CommonObject
 	}
 
 	/**
+	 * Adjust the actual quantity of one stock line while the sheet is still
+	 * pending (V0.2: what is actually weighed/handed over may differ from the
+	 * prescribed amount, e.g. TCM herbs weighed at the counter). confirm()
+	 * allocates FEFO from this value. Non-stock lines and confirmed sheets
+	 * are refused; no new column - the prescribed quantity stays readable on
+	 * the linked prescription lines.
+	 *
+	 * @param	User	$user	Acting user (pharmacy dispense permission, re-checked by UI)
+	 * @param	int		$lineId	Dispense line rowid ($lines[n]['id'])
+	 * @param	float	$qty	New quantity, must be > 0
+	 * @return	int				1 ok, <0 refused/error (this->error)
+	 */
+	public function updateLineQty(User $user, $lineId, $qty)
+	{
+		$this->error = '';
+		if ((int) $this->status !== PHARMACY_STATUS_PENDING) {
+			$this->error = 'PharmacyErrQtyNotPending';
+			return -1;
+		}
+		$qty = price2num($qty, 'MS');
+		if ($qty === '' || $qty === null || (float) $qty <= 0) {
+			$this->error = 'PharmacyErrQtyInvalid';
+			return -2;
+		}
+		$this->db->begin();
+		$sql = "SELECT rowid, is_stock FROM ".$this->db->prefix()."pharmacy_dispense_line";
+		$sql .= " WHERE rowid = ".((int) $lineId)." AND fk_dispense = ".((int) $this->id);
+		$resql = $this->db->query($sql);
+		if (!$resql) {
+			$this->db->rollback();
+			$this->error = $this->db->lasterror();
+			return -3;
+		}
+		$obj = $this->db->fetch_object($resql);
+		$this->db->free($resql);
+		if (!$obj) {
+			$this->db->rollback();
+			$this->error = 'NoRecordFound';
+			return -4;
+		}
+		if ((int) $obj->is_stock !== 1) {
+			$this->db->rollback();
+			$this->error = 'PharmacyErrQtyNonStock';
+			return -5;
+		}
+		$sql = "UPDATE ".$this->db->prefix()."pharmacy_dispense_line SET qty = ".((float) $qty);
+		$sql .= " WHERE rowid = ".((int) $lineId)." AND fk_dispense = ".((int) $this->id);
+		if (!$this->db->query($sql)) {
+			$this->db->rollback();
+			$this->error = $this->db->lasterror();
+			return -6;
+		}
+		$this->db->commit();
+		foreach ($this->lines as $k => $l) {
+			if ((int) $l['id'] === (int) $lineId) {
+				$this->lines[$k]['qty'] = (float) $qty;
+			}
+		}
+		return 1;
+	}
+
+	/**
 	 * Confirm the dispensing (spec §3.3 step 2): the only place stock moves.
 	 * Idempotency gate = conditional UPDATE status 0 -> 1 (affected rows must
 	 * be 1). FEFO allocation per stock line, one MouvementStock::livraison()

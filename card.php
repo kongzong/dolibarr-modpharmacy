@@ -192,6 +192,22 @@ if ($action == 'confirm_return' && $id > 0 && $confirm == 'yes') {
 	exit;
 }
 
+// ------------------------------------------------- adjust actual line qty (V0.2)
+if ($action == 'setqty' && $id > 0 && GETPOST('token', 'alpha') != '' && GETPOST('save', 'alpha') !== '') {
+	if ($dao->fetch($id) > 0 && (int) $dao->status === PHARMACY_STATUS_PENDING && $user->hasRight('pharmacy', 'dispense')) {
+		$result = $dao->updateLineQty($user, GETPOSTINT('lineid'), GETPOST('qty', 'alpha'));
+		if ($result > 0) {
+			setEventMessages($langs->trans("PharmacyQtySaved"), null, 'mesgs');
+		} else {
+			$msg = $dao->error;
+			$translated = $langs->trans($msg);
+			setEventMessages($translated !== $msg ? $translated : $msg, null, 'errors');
+		}
+	}
+	header('Location: '.$_SERVER["PHP_SELF"].'?id='.$id);
+	exit;
+}
+
 if ($id <= 0 || $dao->fetch($id) <= 0) {
 	llxHeader('', $langs->trans("PharmacyDispenseList"));
 	print '<div class="error">'.$langs->trans("NoRecordFound").'</div>';
@@ -245,15 +261,46 @@ print '<th class="liste_titre right">'.$langs->trans("PharmacyLineQty").'</th>';
 print '<th class="liste_titre">'.$langs->trans("PharmacyLineUnit").'</th>';
 print '<th class="liste_titre">'.$langs->trans("PharmacyLineBatch").'</th>';
 print '</tr>';
+$canEditQty = ((int) $dao->status === PHARMACY_STATUS_PENDING && $user->hasRight('pharmacy', 'dispense'));
+$editLineId = ($action == 'editqty') ? GETPOSTINT('lineid') : 0;
 foreach ($dao->lines as $i => $l) {
 	$doseHint = '';
 	if ($isTcmMult && isset($presc->lines[$i]) && $presc->lines[$i]['qty'] !== null) {
 		$doseHint = ' <span class="opacitymedium">('.$langs->trans('PharmacyDoseDetail', price2num($presc->lines[$i]['qty'], 'MS'), dol_escape_htmltag((string) $presc->lines[$i]['qty_unit']), (int) $presc->doses).')</span>';
 	}
+	// V0.2: stock lines of a pending sheet can carry an actual quantity
+	// different from the prescribed one (counter-weighed herbs, etc.)
+	if ($canEditQty && $l['is_stock'] && (int) $l['id'] === $editLineId) {
+		print '<tr class="oddeven">';
+		print '<td>'.($i + 1).'</td>';
+		print '<td>'.dol_escape_htmltag($l['label']).$doseHint;
+		if (isset($presc->lines[$i]) && $presc->lines[$i]['qty'] !== null) {
+			print '<div class="opacitymedium small">'.$langs->trans('PharmacyQtyPrescRef', price2num($presc->lines[$i]['qty'], 'MS'), dol_escape_htmltag((string) $presc->lines[$i]['qty_unit'])).'</div>';
+		}
+		print '</td>';
+		print '<td class="right" colspan="2">';
+		print '<form method="POST" action="'.$_SERVER["PHP_SELF"].'" class="inline-block">';
+		print '<input type="hidden" name="token" value="'.newToken().'">';
+		print '<input type="hidden" name="action" value="setqty">';
+		print '<input type="hidden" name="id" value="'.$dao->id.'">';
+		print '<input type="hidden" name="lineid" value="'.$l['id'].'">';
+		print '<input class="right" type="text" name="qty" value="'.price2num($l['qty'], 'MS').'" size="8"> ';
+		print '<button type="submit" class="button smallpaddingimp" name="save" value="1">'.$langs->trans("Save").'</button> ';
+		print '<a class="button button-cancel smallpaddingimp" href="'.$_SERVER["PHP_SELF"].'?id='.$dao->id.'">'.$langs->trans("Cancel").'</a>';
+		print '</form>';
+		print '</td>';
+		print '<td>'.dol_escape_htmltag((string) $l['batch_note']).'</td>';
+		print '</tr>';
+		continue;
+	}
+	$qtyHtml = price2num($l['qty'], 'MS');
+	if ($canEditQty && $l['is_stock']) {
+		$qtyHtml .= ' <a class="opacitymedium small" href="'.$_SERVER["PHP_SELF"].'?id='.$dao->id.'&action=editqty&lineid='.$l['id'].'">('.$langs->trans("PharmacyQtyEdit").')</a>';
+	}
 	print '<tr class="oddeven">';
 	print '<td>'.($i + 1).'</td>';
 	print '<td>'.dol_escape_htmltag($l['label']).$doseHint.'</td>';
-	print '<td class="right">'.price2num($l['qty'], 'MS').'</td>';
+	print '<td class="right">'.$qtyHtml.'</td>';
 	print '<td>'.dol_escape_htmltag((string) $l['qty_unit']).'</td>';
 	print '<td>'.($l['is_stock'] ? dol_escape_htmltag((string) $l['batch_note']) : '<span class="opacitymedium">'.$langs->trans("PharmacyLineNonStock").'</span>').'</td>';
 	print '</tr>';
