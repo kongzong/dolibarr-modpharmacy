@@ -143,3 +143,20 @@ PharmacyDecantErrDate=请填写有效日期
 PharmacyDecantErrChecker=请填写复核人
 PharmacyDecantFilterAll=全部动作
 PharmacyDecantListEmpty=暂无登记记录
+
+# --- Expiry disposition (2026-10-02) ---
+PharmacyExpiryActionCol=处置
+PharmacyExpiryScrap=报废
+PharmacyExpiryBlock=停售
+PharmacyExpiryUnblock=恢复
+PharmacyExpiryBlocked=已停售
+PharmacyExpiryBlockedHelp=该批次已停售，发药分配（FEFO）跳过；恢复出库前仅可报废
+PharmacyExpiryScrapNote=报废原因/备注
+PharmacyExpiryScrapAsk=确认整批报废？批号 %s 余量 %s 将清零（库存移动留痕 + 处置记录，不可撤销）。
+PharmacyExpiryBlockAsk=确认停售批号 %s？停售后发药分配（FEFO）将跳过该批次。
+PharmacyExpiryUnblockAsk=确认恢复批号 %s 出库？
+PharmacyExpiryDone=处置已完成
+PharmacyExpiryErrInvalid=处置参数无效
+PharmacyExpiryErrBatchGone=批次不存在或库存行缺失，无法处置
+PharmacyExpiryErrQtyChanged=批次余量已变化（可能有并发发药），请刷新后重试
+PharmacyErrExpiryOnly=库存中仅剩过期或已停售批次，无法发药；请在效期预警页处置（报废/停售）后补货

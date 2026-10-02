@@ -26,6 +26,7 @@
  */
 
 dol_include_once('/pharmacy/lib/pharmacy.lib.php');
+dol_include_once('/pharmacy/class/pharmacybatchaction.class.php');
 
 /**
  * Class PharmacyExpiryAlert
@@ -65,13 +66,14 @@ class PharmacyExpiryAlert
 		// (may emit d/m/Y), so format the bound explicitly.
 		$limitDate = date('Y-m-d', (int) $limitTs);
 
-		$sql = "SELECT prod.rowid as fk_product, prod.label as product_label, prod.ref as product_ref, pb.batch, pl.sellby, pl.eatby, pb.qty,";
+		$sql = "SELECT prod.rowid as fk_product, prod.label as product_label, prod.ref as product_ref, pb.batch, pl.sellby, pl.eatby, pb.qty, ea.op as block_op,";
 		$sql .= " w.rowid as fk_entrepot, w.lieu as warehouse_lieu, w.ref as warehouse_label";
 		$sql .= " FROM ".$this->db->prefix()."product_lot as pl";
 		$sql .= " INNER JOIN ".$this->db->prefix()."product_batch as pb ON pb.batch = pl.batch";
 		$sql .= " INNER JOIN ".$this->db->prefix()."product_stock as ps ON ps.rowid = pb.fk_product_stock";
 		$sql .= " INNER JOIN ".$this->db->prefix()."product as prod ON prod.rowid = ps.fk_product";
 		$sql .= " INNER JOIN ".$this->db->prefix()."entrepot as w ON w.rowid = ps.fk_entrepot AND w.statut = 1";
+		$sql .= PharmacyBatchAction::latestOpJoin('ps.fk_product', 'pb.batch');
 		$sql .= " WHERE ps.fk_product = pl.fk_product AND pl.entity IN (".getEntity('product').") AND pb.qty > 0";
 		$sql .= " AND ((pl.sellby IS NOT NULL AND pl.sellby <= '".$this->db->escape($limitDate)."')";
 		$sql .= " OR (pl.eatby IS NOT NULL AND pl.eatby <= '".$this->db->escape($limitDate)."'))";
@@ -97,6 +99,7 @@ class PharmacyExpiryAlert
 				'qty' => (float) $o->qty,
 				'fk_entrepot' => (int) $o->fk_entrepot,
 				'warehouse' => trim((string) $o->warehouse_lieu.(empty($o->warehouse_label) ? '' : ' - '.$o->warehouse_label)),
+				'blocked' => ($o->block_op === 'BLOCK'),
 			);
 		}
 		$this->db->free($resql);

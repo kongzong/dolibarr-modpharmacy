@@ -140,10 +140,11 @@ class modPharmacy extends DolibarrModules
 			),
 		);
 
-		// Permissions: one-level form, ids 50163011..51 (spec §9)
+		// Permissions: one-level form, ids 50163011..61 (spec §9; 61=dispose
+		// added 2026-10-02 for the expiry disposition actions)
 		$this->rights = array();
 		$r = 0;
-		$perms = array(11 => 'read', 21 => 'write', 31 => 'dispense', 41 => 'return', 51 => 'admin');
+		$perms = array(11 => 'read', 21 => 'write', 31 => 'dispense', 41 => 'return', 51 => 'admin', 61 => 'dispose');
 		foreach ($perms as $suffix => $code) {
 			$this->rights[$r][0] = $this->numero . $suffix;
 			$this->rights[$r][1] = 'PharmacyPerm'.ucfirst($code);

@@ -38,6 +38,13 @@ dol_include_once('/prescription/lib/prescription.lib.php');
 class PharmacyStockShortageException extends RuntimeException {}
 
 /**
+ * Sentinel raised inside confirm() when the reel total covers the need but
+ * the only batches left are expired or under a sales hold (BLOCK). Distinct
+ * from a plain shortage so the UI can tell the operator what to do next.
+ */
+class PharmacyExpiryOnlyException extends RuntimeException {}
+
+/**
  * Sentinel raised inside confirm() when a stock line's product has
  * tobatch=0 (batch management not enabled). Per the 2026-09-24 design
  * consensus, dispensing requires batch-managed products; this gives a
@@ -573,7 +580,7 @@ class Dispense extends CommonObject
 			while (property_exists($this->db, 'transaction_opened') && $this->db->transaction_opened > 0) {
 				$this->db->rollback();
 			}
-			$this->error = $e instanceof PharmacyNoBatchException ? 'PharmacyErrNoBatch' : ($e instanceof PharmacyStockShortageException ? 'PharmacyErrStockShort' : $e->getMessage());
+			$this->error = $e instanceof PharmacyNoBatchException ? 'PharmacyErrNoBatch' : ($e instanceof PharmacyStockShortageException ? 'PharmacyErrStockShort' : ($e instanceof PharmacyExpiryOnlyException ? 'PharmacyErrExpiryOnly' : $e->getMessage()));
 			dol_syslog('Dispense::confirm failed: '.$e->getMessage(), LOG_ERR);
 			return -1;
 		}
@@ -702,10 +709,19 @@ class Dispense extends CommonObject
 		// what earlier lines of this same sheet already reserved (batch rows
 		// are authoritative only when productbatch is enabled, so track
 		// in-memory reservations regardless of that setting).
-		$sql = "SELECT pb.rowid, pb.batch, pl.eatby, pl.sellby, pb.qty";
+		// GSP red lines (2026-10-02): expired batches must never leave the
+		// stock (effective expiry <= today is excluded), nor must batches
+		// under a sales hold (latest llx_pharmacy_expiry_action op = BLOCK).
+		// Excluded batches are still fetched so the caller gets a distinct
+		// "only expired / held batches left" error instead of a misleading
+		// plain shortage (reel includes those quantities).
+		require_once DOL_DOCUMENT_ROOT.'/custom/pharmacy/class/pharmacybatchaction.class.php';
+		$today = date('Y-m-d');
+		$sql = "SELECT pb.rowid, pb.batch, pl.eatby, pl.sellby, pb.qty, ea.op as eaop";
 		$sql .= " FROM ".$this->db->prefix()."product_batch as pb";
 		$sql .= " INNER JOIN ".$this->db->prefix()."product_stock as ps ON ps.rowid = pb.fk_product_stock";
 		$sql .= " INNER JOIN ".$this->db->prefix()."product_lot as pl ON pl.fk_product = ps.fk_product AND pl.batch = pb.batch";
+		$sql .= PharmacyBatchAction::latestOpJoin('ps.fk_product', 'pb.batch');
 		$sql .= " WHERE ps.fk_product = ".((int) $fkProduct)." AND ps.fk_entrepot = ".((int) $warehouseId)." AND pl.entity = ".(int) $this->entity." AND pb.qty > 0";
 		$sql .= " ORDER BY (pl.sellby IS NULL) ASC, pl.sellby ASC, (pl.eatby IS NULL) ASC, pl.eatby ASC, pb.batch ASC";
 		$sql .= " FOR UPDATE";
@@ -715,7 +731,17 @@ class Dispense extends CommonObject
 		}
 		$allocation = array();
 		$remaining = (float) $qtyNeeded;
+		$excludedQty = 0.0;
 		while ($o = $this->db->fetch_object($resql)) {
+			// GSP guard: expired batches and held batches are skipped (they
+			// stay in stock until scrapped / unblocked through the expiry
+			// disposition page).
+			$effDate = $o->sellby ? substr((string) $o->sellby, 0, 10) : ($o->eatby ? substr((string) $o->eatby, 0, 10) : null);
+			$isExpired = $effDate !== null && strcmp($effDate, $today) <= 0;
+			if ($isExpired || $o->eaop === 'BLOCK') {
+				$excludedQty += (float) $o->qty;
+				continue;
+			}
 			if ($remaining <= 0) {
 				break;
 			}
@@ -734,6 +760,10 @@ class Dispense extends CommonObject
 		}
 		$this->db->free($resql);
 		if ($remaining > 0.0000001) {
+			if ($excludedQty + $remaining <= $reel + 0.0000001 && $excludedQty > 0.0000001) {
+				// The shortage is explained by expired / held batches alone.
+				throw new PharmacyExpiryOnlyException();
+			}
 			return null; // batch rows can't cover the need (data inconsistency)
 		}
 		return $allocation;

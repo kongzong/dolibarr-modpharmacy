@@ -42,6 +42,8 @@ if (!$res) {
 require_once DOL_DOCUMENT_ROOT.'/product/class/product.class.php';
 dol_include_once('/pharmacy/lib/pharmacy.lib.php');
 dol_include_once('/pharmacy/class/pharmacyexpiryalert.class.php');
+dol_include_once('/pharmacy/class/pharmacybatchaction.class.php');
+require_once DOL_DOCUMENT_ROOT.'/core/class/html.form.class.php';
 
 /**
  * @var Conf $conf
@@ -64,10 +66,75 @@ $wid = GETPOSTINT('wid');
 if ($wid < 0) {
 	$wid = 0;
 }
+$action = GETPOST('action', 'aZ09');
+$canDispose = $user->hasRight('pharmacy', 'dispose');
+
+// ---- Disposition confirm (POSTed by formconfirm): SCRAP / BLOCK / UNBLOCK.
+// Database writes happen here, before llxHeader(); the formconfirm itself is
+// printed after llxHeader() (it needs the header already sent).
+$disposeError = '';
+if ($action === 'confirm_dispose' && GETPOST('confirm', 'alpha') === 'yes') {
+	if (!$canDispose) {
+		accessforbidden();
+	}
+	$op = GETPOST('dispose_op', 'aZ09');
+	$fkProduct = GETPOSTINT('dispose_product');
+	$batch = trim(GETPOST('dispose_batch', 'alpha'));
+	$expectedQty = (float) GETPOST('dispose_qty', 'alpha');
+	$note = trim(GETPOST('dispose_note', 'restricthtml'));
+	// SCRAP needs the concrete warehouse of the row (not the wid filter,
+	// which is 0 = all warehouses); BLOCK/UNBLOCK ignore it.
+	$dwid = GETPOSTINT('dispose_wid');
+	if ($dwid <= 0) {
+		$dwid = $wid;
+	}
+	$batchAction = new PharmacyBatchAction($db);
+	if ($op === 'SCRAP') {
+		$res = $batchAction->scrap($user, $fkProduct, $batch, $dwid, $expectedQty, $note);
+	} elseif ($op === 'BLOCK' || $op === 'UNBLOCK') {
+		$res = $batchAction->setBlock($user, $fkProduct, $batch, $op, $note);
+	} else {
+		$res = -1;
+		$batchAction->error = 'PharmacyExpiryErrInvalid';
+	}
+	if ($res > 0) {
+		setEventMessages($langs->trans("PharmacyExpiryDone"), null);
+		header('Location: '.$_SERVER["PHP_SELF"].'?wid='.((int) $wid).'&token='.newToken());
+		exit;
+	}
+	$disposeError = $batchAction->error;
+	setEventMessages($langs->trans($disposeError !== '' ? $disposeError : 'PharmacyExpiryErrInvalid'), null, 'errors');
+	$action = '';
+}
 
 llxHeader('', $langs->trans("PharmacyExpiry"));
 
 print load_fiche_titre($langs->trans("PharmacyExpiry").' <span class="opacitymedium">('.(int) $window.' d)</span>', '<a class="butActionNew" href="'.dol_buildpath('/pharmacy/decant.php', 1).'"><span class="fa fa-box fa-fw valignmiddle"></span>'.$langs->trans("PharmacyDecant").'</a>', 'fa-hourglass-half');
+
+// ---- formconfirm for the row actions (needs headers already sent) ----
+$askOp = '';
+if ($canDispose && ($action === 'ask_scrap' || $action === 'ask_block' || $action === 'ask_unblock')) {
+	$askOp = $action === 'ask_scrap' ? 'SCRAP' : ($action === 'ask_block' ? 'BLOCK' : 'UNBLOCK');
+	$askProduct = GETPOSTINT('product');
+	$askBatch = trim(GETPOST('batch', 'alpha'));
+	$askQty = (float) GETPOST('qty', 'alpha');
+	$askWid = GETPOSTINT('dispose_wid');
+	$backUrl = $_SERVER["PHP_SELF"].'?wid='.((int) $wid).'&token='.newToken()
+		.'&dispose_op='.$askOp.'&dispose_product='.((int) $askProduct)
+		.'&dispose_batch='.urlencode($askBatch).'&dispose_qty='.price2num($askQty, 'MS')
+		.'&dispose_wid='.((int) $askWid);
+	$form = new Form($db);
+	if ($askOp === 'SCRAP') {
+		$formquestion = array(
+			0 => array('type' => 'text', 'name' => 'dispose_note', 'label' => $langs->trans("PharmacyExpiryScrapNote"), 'value' => '', 'morecss' => 'minwidth300'),
+		);
+		print $form->formconfirm($backUrl, $langs->trans("PharmacyExpiryScrap"), $langs->trans("PharmacyExpiryScrapAsk", $askBatch, price2num($askQty, 'MS')), 'confirm_dispose', $formquestion, 'yes');
+	} elseif ($askOp === 'BLOCK') {
+		print $form->formconfirm($backUrl, $langs->trans("PharmacyExpiryBlock"), $langs->trans("PharmacyExpiryBlockAsk", $askBatch), 'confirm_dispose', array(), 'yes');
+	} else {
+		print $form->formconfirm($backUrl, $langs->trans("PharmacyExpiryUnblock"), $langs->trans("PharmacyExpiryUnblockAsk", $askBatch), 'confirm_dispose', array(), 'yes');
+	}
+}
 
 // ---- Warehouse filter (open warehouses only) ----
 $warehouses = array();
@@ -126,10 +193,11 @@ print '<th class="liste_titre">'.$langs->trans("PharmacyExpiryEatBy").'</th>';
 print '<th class="liste_titre">'.$langs->trans("PharmacyExpiryDaysLeftCol").'</th>';
 print '<th class="liste_titre right">'.$langs->trans("PharmacyExpiryQty").'</th>';
 print '<th class="liste_titre">'.$langs->trans("PharmacyExpiryWarehouse").'</th>';
+print '<th class="liste_titre center">'.$langs->trans("PharmacyExpiryActionCol").'</th>';
 print '</tr>';
 
 if (empty($rows)) {
-	print '<tr><td colspan="7"><span class="opacitymedium">'.$langs->trans("PharmacyExpiryNone").'</span></td></tr>';
+	print '<tr><td colspan="8"><span class="opacitymedium">'.$langs->trans("PharmacyExpiryNone").'</span></td></tr>';
 }
 
 foreach ($rows as $r) {
@@ -143,14 +211,31 @@ foreach ($rows as $r) {
 		$daysBadge = '<span class="badge badge-status0">'.$langs->trans("PharmacyExpiryDaysLeft", (string) $days).'</span>';
 	}
 
+	// Disposition links (dispose permission): scrap the whole batch, or
+	// hold / release it (hold = excluded from FEFO dispensing).
+	$rowQty = price2num($r['qty'], 'MS');
+	$actionUrl = $_SERVER["PHP_SELF"].'?wid='.((int) $wid).'&token='.newToken().'&product='.((int) $r['fk_product']).'&batch='.urlencode($r['batch']).'&qty='.$rowQty.'&dispose_wid='.((int) $r['fk_entrepot']);
+	$dispCell = '';
+	if ($canDispose) {
+		$links = array();
+		if ($r['blocked']) {
+			$links[] = '<a class="reposition" href="'.$actionUrl.'&action=ask_unblock"><span class="fa fa-play fa-fw valignmiddle"></span>'.$langs->trans("PharmacyExpiryUnblock").'</a>';
+		} else {
+			$links[] = '<a class="reposition" href="'.$actionUrl.'&action=ask_block"><span class="fa fa-pause fa-fw valignmiddle"></span>'.$langs->trans("PharmacyExpiryBlock").'</a>';
+		}
+		$links[] = '<a class="reposition" href="'.$actionUrl.'&action=ask_scrap"><span class="fa fa-trash fa-fw valignmiddle"></span>'.$langs->trans("PharmacyExpiryScrap").'</a>';
+		$dispCell = implode(' &nbsp; ', $links);
+	}
+
 	print '<tr class="oddeven">';
 	print '<td><a href="'.dol_buildpath('/product/card.php', 1).'?id='.((int) $r['fk_product']).'">'.dol_escape_htmltag($r['product']).'</a></td>';
 	print '<td class="nowrap">'.dol_escape_htmltag($r['batch']).'</td>';
 	print '<td class="nowrap">'.($r['sellby'] ? dol_print_date($r['sellby'], 'day') : '').'</td>';
 	print '<td class="nowrap">'.($r['eatby'] ? dol_print_date($r['eatby'], 'day') : '').'</td>';
 	print '<td class="nowrap">'.$daysBadge.'</td>';
-	print '<td class="right">'.price2num($r['qty'], 'MS').'</td>';
+	print '<td class="right">'.$rowQty.'</td>';
 	print '<td class="nowrap"><a href="'.dol_buildpath('/product/stock/card.php', 1).'?id='.((int) $r['fk_entrepot']).'">'.dol_escape_htmltag($r['warehouse']).'</a></td>';
+	print '<td class="center nowrap">'.($r['blocked'] ? '<span class="badge badge-status8" title="'.$langs->trans("PharmacyExpiryBlockedHelp").'">'.$langs->trans("PharmacyExpiryBlocked").'</span> ' : '').$dispCell.'</td>';
 	print '</tr>';
 }
 print '</table></div>';

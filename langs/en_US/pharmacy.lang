@@ -143,3 +143,20 @@ PharmacyDecantErrDate=Enter a valid date
 PharmacyDecantErrChecker=Enter the checker name
 PharmacyDecantFilterAll=All actions
 PharmacyDecantListEmpty=No entries yet
+
+# --- Expiry disposition (2026-10-02) ---
+PharmacyExpiryActionCol=Disposition
+PharmacyExpiryScrap=Scrap
+PharmacyExpiryBlock=Hold
+PharmacyExpiryUnblock=Release
+PharmacyExpiryBlocked=Held
+PharmacyExpiryBlockedHelp=This batch is on hold: FEFO dispensing skips it until released (or scrapped)
+PharmacyExpiryScrapNote=Scrap reason / note
+PharmacyExpiryScrapAsk=Write off the whole batch? Batch %s qty %s will be zeroed (stock movement + disposition trace, irreversible).
+PharmacyExpiryBlockAsk=Put batch %s on sales hold? FEFO dispensing will skip it.
+PharmacyExpiryUnblockAsk=Release batch %s back to dispensing?
+PharmacyExpiryDone=Disposition saved
+PharmacyExpiryErrInvalid=Invalid disposition parameters
+PharmacyExpiryErrBatchGone=Batch not found or stock row missing
+PharmacyExpiryErrQtyChanged=Batch quantity changed meanwhile (concurrent dispensing?), please refresh and retry
+PharmacyErrExpiryOnly=Only expired or held batches are left in stock; dispose of them (scrap / hold) on the expiry page first, then restock

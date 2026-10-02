@@ -13,8 +13,13 @@ Dolibarr 22.0.x 外部模块：面向中医馆/中西医结合诊所的处方发
 - **FEFO 强制**：批次产品按效期先出（`Productbatch::findAllForProduct` 按 sellby 排序），不允许拣选批次；批次/效期写入行快照
 - 处方状态只经 modPrescription 0.1.1 的 `markDispensed()` / `markDispenseUndone()` 桥接推进，不直写处方表
 - **退回**：必填原因，按原批次逆向入库（`MouvementStock::reception`），处方回已签发可重开
+- **中药剂数口径**：TCM 处方行 `qty` = 每剂克数，快照发药行时 × `doses`（WM/OTC 的 doses 为脏数据不乘）；发药页显示「每剂 X × N 剂」
+- **实发数量可调（V0.2）**：PENDING 状态的库存行确认前可改实发量（`Dispense::updateLineQty`，含处方量参照），confirm 按调整后数量 FEFO 扣减，差额入账；已确认/非库存行不可改
+- **装斗/清斗登记**：GSP 第164条第(九)项「不同批号装斗前清斗并记录」的留痕页 `decant.php` + `llx_pharmacy_decant`，**append-only**（无改删路径），不与库存扣减联动，复核人必填
+- **效期处置动作（V0.2）**：效期页行内「报废 / 停售 / 恢复」，走新权限 `dispose`（61）；报废整批清零走 `MouvementStock::livraison`（与发药同路径，原生库存移动留痕）+ `llx_pharmacy_expiry_action` 追加式处置记录（op=SCRAP/BLOCK/UNBLOCK，无改删路径，批次当前状态=最大 rowid 行的 op）；**FEFO 双拦截（GSP 铁律）**：`allocateFefo()` 跳过已过期批次（COALESCE(sellby,eatby) ≤ 今天）与被停售批次，仅剩此类批次时报专门错误 `PharmacyErrExpiryOnly`（区别于普通库存不足）
+- **散客 OTC 零售**：`retail.php` 购物车一键链路（OTC 处方→签发→发药→收费→现收现付），虚拟散客档案来自 modPatient；只允许 `tobatch=1` 产品
 - 效期预警页（近效期/过期批次清单）+ 每日 Cron（默认关）；**wecom 推送默认关**，开启属维护者显式决定（对外触达红线）
-- 权限一级形式 `read / write / dispense / return / admin`；审计复用 `llx_patient_audit`，动作 `PHARMACY_*`
+- 权限一级形式 `read / write / dispense / return / admin / dispose`；审计复用 `llx_patient_audit`，动作 `PHARMACY_*`
 - 编号 `FY-YYYYMMDD-NNN` 按日流水，取号与保存同事务（行锁方案，与 patient/medrecord/prescription 同构）
 - 模块 ID `501630`；左菜单挂 modPatient 的"诊所"顶级菜单
 
@@ -24,7 +29,8 @@ Dolibarr 22.0.x 外部模块：面向中医馆/中西医结合诊所的处方发
 |---|---|---|
 | 0 modPrescription 0.1.1 | `markDispensed` / `markDispenseUndone` 桥接方法 + `date_dispensed` 列 | 已发布 `v0.1.1`（2026-09-22） |
 | 1 骨架 | descriptor（ID 501630、models=1、hooks=prescriptioncard、cron 默认关）、2 表 + sequence、常量、权限、菜单（发药列表/效期预警）、`Dispense` 类 fetch/search 壳、`PharmacyExpiryAlert` 扫描、`PharmacyNumbering`、页面壳（card/list/expiry/setup）、双语言、8 单元测试 | 代码完成：8 单元 + 6 集成（MariaDB 20 并发）通过 |
-| 2 发药核心 | `Dispense::create`（从处方建单，唯一性闸门）/ `confirm`（幂等 + FEFO 扣减）/ `return`（逆向）；处方页 hook 注入；确认/退回按钮 | 待做 |
+| 2 发药核心 | `Dispense::create`（从处方建单，唯一性闸门）/ `confirm`（幂等 + FEFO 扣减）/ `return`（逆向）；处方页 hook 注入；确认/退回按钮 | 已完成 |
+| 迭代增量 | 效期预警页打磨（统计徽章/剩余天数/仓库筛选）、散客 OTC 零售一键链路、中药剂数换算、实发数量可调（V0.2）、装斗/清斗登记页、效期处置动作（报废/停售 + FEFO 拦截过期与停售批） | 已完成 |
 | 3 PDF 与效期 | `pdf_fy` 发药单 PDF、确认自动生成、效期推送（wecom，开关） | 待做 |
 | 4 集成面 | REST 6 端点（API 类 `Pharmacy`）、停用→启用全流程、`v0.1.0` | 待做 |
 
