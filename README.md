@@ -19,7 +19,11 @@ Dolibarr 22.0.x 外部模块：面向中医馆/中西医结合诊所的处方发
 - **效期处置动作（V0.2）**：效期页行内「报废 / 停售 / 恢复」，走新权限 `dispose`（61）；报废整批清零走 `MouvementStock::livraison`（与发药同路径，原生库存移动留痕）+ `llx_pharmacy_expiry_action` 追加式处置记录（op=SCRAP/BLOCK/UNBLOCK，无改删路径，批次当前状态=最大 rowid 行的 op）；**FEFO 双拦截（GSP 铁律）**：`allocateFefo()` 跳过已过期批次（COALESCE(sellby,eatby) ≤ 今天）与被停售批次，仅剩此类批次时报专门错误 `PharmacyErrExpiryOnly`（区别于普通库存不足）
 - **散客 OTC 零售**：`retail.php` 购物车一键链路（OTC 处方→签发→发药→收费→现收现付），虚拟散客档案来自 modPatient；只允许 `tobatch=1` 产品
 - 效期预警页（近效期/过期批次清单）+ 每日 Cron（默认关）；**wecom 推送默认关**，开启属维护者显式决定（对外触达红线）
-- 权限一级形式 `read / write / dispense / return / admin / dispose`；审计复用 `llx_patient_audit`，动作 `PHARMACY_*`
+- **采购补货 + 收货入库**：`purchase.php` 选供应商与药品行（session 购物车，同零售页写法）→ 生成**原生供应商订单** `llx_commande_fournisseur`（`create → addline → valid → approve → commande`）；`dispatch.php` 逐行录批号/销售期/失效期，走 `CommandeFournisseur::dispatchProduct()` 收货，内部写 `llx_reception` + 增 `llx_product_stock.reel` + 建 `llx_product_lot`/`llx_product_batch`（**批次铁律由核心保证**）。**不自建单据表**。新权限 `purchase`(71)/`dispatch`(81)，另需核心 `fournisseur/commande` 的 `creer`+`approuver`+`commander`（`valid`/`approve`/`commande` 各自鉴权）
+  - 收货生效前提：全局开关 `STOCK_CALCULATE_ON_SUPPLIER_DISPATCH_ORDER`（页面首次进入自动 `dol_const` 打开），否则核心只记 `receptiondet_batch` 不动库存
+  - 供应商订单编号依赖 `COMMANDE_SUPPLIER_ADDON_NUMBER`（本模块 init 落 `mod_commande_fournisseur_muguet`），未启用时核心只给 `(PROVn)` 占位单号
+  - 供应商主数据：`llx_societe.fournisseur=1`（**列名是 `fournisseur`，没有 `supplier` 列**）+ 分类走 `llx_categorie`(type=1) 与 `llx_categorie_fournisseur`
+- 权限一级形式 `read / write / dispense / return / admin / dispose / purchase / dispatch`；审计复用 `llx_patient_audit`，动作 `PHARMACY_*`
 - 编号 `FY-YYYYMMDD-NNN` 按日流水，取号与保存同事务（行锁方案，与 patient/medrecord/prescription 同构）
 - 模块 ID `501630`；左菜单挂 modPatient 的"诊所"顶级菜单
 

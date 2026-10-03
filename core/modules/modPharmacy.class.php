@@ -107,6 +107,8 @@ class modPharmacy extends DolibarrModules
 			0 => array('PHARMACY_WAREHOUSE_ID', 'chaine', '', 'Default warehouse id for dispensing (empty = pick at dispense time)', 0, 'current', 1),
 			1 => array('PHARMACY_EXPIRY_DAYS', 'chaine', '90', 'Expiry alert window in days', 0, 'current', 1),
 			2 => array('PHARMACY_EXPIRY_NOTIFY', 'chaine', '0', 'Send the expiry alert digest through modWeCom (0 off by default; enabling is an explicit maintainer decision)', 0, 'current', 1),
+			// 采购补货走原生供应商订单：没有编号模块时核心只会给 '(PROVn)' 占位单号
+			3 => array('COMMANDE_SUPPLIER_ADDON_NUMBER', 'chaine', 'mod_commande_fournisseur_muguet', 'Numbering module for supplier orders (purchase replenishment)', 0, 'current', 1),
 		);
 
 		if (!isModEnabled("pharmacy")) {
@@ -140,11 +142,12 @@ class modPharmacy extends DolibarrModules
 			),
 		);
 
-		// Permissions: one-level form, ids 50163011..61 (spec §9; 61=dispose
-		// added 2026-10-02 for the expiry disposition actions)
+		// Permissions: one-level form, ids 50163011..81 (spec §9; 61=dispose
+		// added 2026-10-02 for the expiry disposition actions; 71/81=purchase
+		// and dispatch added 2026-10-03 for the supplier replenishment chain)
 		$this->rights = array();
 		$r = 0;
-		$perms = array(11 => 'read', 21 => 'write', 31 => 'dispense', 41 => 'return', 51 => 'admin', 61 => 'dispose');
+		$perms = array(11 => 'read', 21 => 'write', 31 => 'dispense', 41 => 'return', 51 => 'admin', 61 => 'dispose', 71 => 'purchase', 81 => 'dispatch');
 		foreach ($perms as $suffix => $code) {
 			$this->rights[$r][0] = $this->numero . $suffix;
 			$this->rights[$r][1] = 'PharmacyPerm'.ucfirst($code);
@@ -156,8 +159,24 @@ class modPharmacy extends DolibarrModules
 		$this->menu = array();
 		$r = 0;
 
+		// Group: pharmacy operations (dispensing / retail / purchase / expiry)
 		$this->menu[$r++] = array(
 			'fk_menu' => 'fk_mainmenu=clinic',
+			'type' => 'left',
+			'titre' => 'ClinicMenuPharmacy',
+			'mainmenu' => 'clinic',
+			'leftmenu' => 'clinic_pharmacy',
+			'prefix' => img_picto('', 'fa-pills_fas_#fb8c00', 'class="paddingright pictofixedwidth"'),
+			'url' => '/pharmacy/list.php',
+			'langs' => 'pharmacy@pharmacy',
+			'position' => 1300,
+			'enabled' => 'isModEnabled("pharmacy")',
+			'perms' => '$user->hasRight("pharmacy", "read")',
+			'target' => '',
+			'user' => 2,
+		);
+		$this->menu[$r++] = array(
+			'fk_menu' => 'fk_mainmenu=clinic,fk_leftmenu=clinic_pharmacy',
 			'type' => 'left',
 			'titre' => 'PharmacyDispenseList',
 			'mainmenu' => 'clinic',
@@ -172,7 +191,7 @@ class modPharmacy extends DolibarrModules
 			'user' => 2,
 		);
 		$this->menu[$r++] = array(
-			'fk_menu' => 'fk_mainmenu=clinic',
+			'fk_menu' => 'fk_mainmenu=clinic,fk_leftmenu=clinic_pharmacy',
 			'type' => 'left',
 			'titre' => 'PharmacyExpiry',
 			'mainmenu' => 'clinic',
@@ -187,7 +206,7 @@ class modPharmacy extends DolibarrModules
 			'user' => 2,
 		);
 		$this->menu[$r++] = array(
-			'fk_menu' => 'fk_mainmenu=clinic',
+			'fk_menu' => 'fk_mainmenu=clinic,fk_leftmenu=clinic_pharmacy',
 			'type' => 'left',
 			'titre' => 'PharmacyDecant',
 			'mainmenu' => 'clinic',
@@ -202,7 +221,37 @@ class modPharmacy extends DolibarrModules
 			'user' => 2,
 		);
 		$this->menu[$r++] = array(
-			'fk_menu' => 'fk_mainmenu=clinic',
+			'fk_menu' => 'fk_mainmenu=clinic,fk_leftmenu=clinic_pharmacy',
+			'type' => 'left',
+			'titre' => 'PharmacyPurchase',
+			'mainmenu' => 'clinic',
+			'leftmenu' => 'pharmacy_purchase',
+			'prefix' => img_picto('', 'fa-truck_fas_#009688', 'class="paddingright pictofixedwidth"'),
+			'url' => '/pharmacy/purchase.php',
+			'langs' => 'pharmacy@pharmacy',
+			'position' => 1300 + $r,
+			'enabled' => 'isModEnabled("pharmacy")',
+			'perms' => '$user->hasRight("pharmacy", "purchase")',
+			'target' => '',
+			'user' => 2,
+		);
+		$this->menu[$r++] = array(
+			'fk_menu' => 'fk_mainmenu=clinic,fk_leftmenu=clinic_pharmacy',
+			'type' => 'left',
+			'titre' => 'PharmacyDispatch',
+			'mainmenu' => 'clinic',
+			'leftmenu' => 'pharmacy_dispatch',
+			'prefix' => img_picto('', 'fa-box-open_fas_#009688', 'class="paddingright pictofixedwidth"'),
+			'url' => '/pharmacy/dispatch.php?id=__ID__',
+			'langs' => 'pharmacy@pharmacy',
+			'position' => 1300 + $r,
+			'enabled' => 'isModEnabled("pharmacy")',
+			'perms' => '$user->hasRight("pharmacy", "dispatch")',
+			'target' => '',
+			'user' => 2,
+		);
+		$this->menu[$r++] = array(
+			'fk_menu' => 'fk_mainmenu=clinic,fk_leftmenu=clinic_pharmacy',
 			'type' => 'left',
 			'titre' => 'PharmacyRetail',
 			'mainmenu' => 'clinic',
@@ -213,6 +262,36 @@ class modPharmacy extends DolibarrModules
 			'position' => 1300 + $r,
 			'enabled' => 'isModEnabled("pharmacy")',
 			'perms' => '$user->hasRight("pharmacy", "write")',
+			'target' => '',
+			'user' => 2,
+		);
+		$this->menu[$r++] = array(
+			'fk_menu' => 'fk_mainmenu=clinic,fk_leftmenu=clinic_report',
+			'type' => 'left',
+			'titre' => 'PharmacyReport',
+			'mainmenu' => 'clinic',
+			'leftmenu' => 'pharmacy_report',
+			'prefix' => img_picto('', 'fa-chart-line_fas_#00897b', 'class="paddingright pictofixedwidth"'),
+			'url' => '/pharmacy/report.php',
+			'langs' => 'pharmacy@pharmacy',
+			'position' => 1503,
+			'enabled' => 'isModEnabled("pharmacy")',
+			'perms' => '$user->hasRight("pharmacy", "read")',
+			'target' => '',
+			'user' => 2,
+		);
+		$this->menu[$r++] = array(
+			'fk_menu' => 'fk_mainmenu=clinic,fk_leftmenu=clinic_report',
+			'type' => 'left',
+			'titre' => 'PharmacyReportStock',
+			'mainmenu' => 'clinic',
+			'leftmenu' => 'pharmacy_report_stock',
+			'prefix' => img_picto('', 'fa-boxes_fas_#00897b', 'class="paddingright pictofixedwidth"'),
+			'url' => '/pharmacy/report_stock.php',
+			'langs' => 'pharmacy@pharmacy',
+			'position' => 1504,
+			'enabled' => 'isModEnabled("pharmacy")',
+			'perms' => '$user->hasRight("pharmacy", "read")',
 			'target' => '',
 			'user' => 2,
 		);
