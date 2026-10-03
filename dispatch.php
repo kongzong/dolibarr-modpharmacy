@@ -64,11 +64,35 @@ if ($warehouseId <= 0) {
 	$warehouseId = $resql ? (int) $db->fetch_object($resql)->rowid : 0;
 }
 
+
+/**
+ * Quantity already received for one order line, from the core reception
+ * batches. Shared by the receive form and the status roll-up.
+ *
+ * @param	DoliDB	$db		Database handler
+ * @param	int		$orderId	Supplier order rowid
+ * @param	int		$lineId		Supplier order line rowid
+ * @return	float
+ */
+function pharmacy_received_qty($db, $orderId, $lineId)
+{
+	$sql = "SELECT COALESCE(SUM(qty),0) q FROM ".$db->prefix()."receptiondet_batch";
+	$sql .= " WHERE fk_element = ".((int) $orderId)." AND fk_elementdet = ".((int) $lineId);
+	$resql = $db->query($sql);
+	if (!$resql) {
+		return 0.0;
+	}
+	$obj = $db->fetch_object($resql);
+	$db->free($resql);
+	return $obj ? (float) $obj->q : 0.0;
+}
+
 // ---------------------------------------------------------------- actions
 if ($action === 'dispatch' && $token !== '') {
 	if ($warehouseId <= 0) {
 		setEventMessages($langs->trans('PharmacyErrWarehouseRequired'), null, 'errors');
 	} else {
+		$receivedSomething = false;
 		foreach ($_POST as $key => $val) {
 			if (preg_match('/^qty_(\d+)$/', $key, $reg)) {
 				$lineId = (int) $reg[1];
@@ -111,9 +135,31 @@ if ($action === 'dispatch' && $token !== '') {
 					$lineId
 				);
 				if ($res > 0) {
+					$receivedSomething = true;
 					setEventMessages($langs->trans('PharmacyDispatchOk', $line->ref, $qty, $batch), null, 'mesgs');
 				} else {
 					setEventMessages($langs->trans('PharmacyDispatchErr', $line->ref, $order->error), $order->errors, 'errors');
+				}
+			}
+
+			// dispatchProduct() only writes reception lines and moves stock; the
+			// order status is advanced by Livraison() (needs the "receptionner"
+			// right, or reception.creer when the reception module is on).
+			if ($receivedSomething) {
+				$order->fetch_lines();
+				$pending = 0;
+				foreach ($order->lines as $line) {
+					$got = pharmacy_received_qty($db, (int) $order->id, (int) $line->id);
+					if ($got + 0.0001 < (float) $line->qty) {
+						$pending++;
+					}
+				}
+				$type = $pending > 0 ? 'par' : 'tot';
+				$resL = $order->Livraison($user, dol_now(), $type, '');
+				if ($resL > 0) {
+					setEventMessages($langs->trans($type == 'tot' ? 'PharmacyDispatchDoneAll' : 'PharmacyDispatchDonePartially', $pending), null, 'mesgs');
+				} else {
+					setEventMessages($langs->trans('PharmacyDispatchStatusFail', $order->error), $order->errors, 'errors');
 				}
 			}
 		}
@@ -128,17 +174,68 @@ if ($action === 'dispatch' && $token !== '') {
 
 llxHeader('', $langs->trans('PharmacyDispatch'), 'PharmacyDispatch');
 
+// No id: the menu entry opens this page without one, so offer the orders that
+// still have something to receive instead of an empty table.
+if ($orderId <= 0) {
+	print load_fiche_titre($langs->trans('PharmacyDispatchPickOrder'), '', 'fa-box-open');
+
+	$sql = "SELECT o.rowid, o.ref, o.date_creation, o.total_ht, o.fk_statut, s.nom as supplier";
+	$sql .= ", (SELECT COUNT(*) FROM ".$db->prefix()."commande_fournisseurdet d WHERE d.fk_commande = o.rowid) nb_lines";
+	$sql .= ", (SELECT COALESCE(SUM(rb.qty),0) FROM ".$db->prefix()."receptiondet_batch rb WHERE rb.fk_element = o.rowid) received";
+	$sql .= " FROM ".$db->prefix()."commande_fournisseur as o";
+	$sql .= " INNER JOIN ".$db->prefix()."societe as s ON s.rowid = o.fk_soc";
+	$sql .= " WHERE o.entity IN (".getEntity('societe').")";
+	$sql .= " AND o.fk_statut IN (".CommandeFournisseur::STATUS_ORDERSENT.", ".CommandeFournisseur::STATUS_RECEIVED_PARTIALLY.")";
+	$sql .= $db->order('o.rowid', 'DESC');
+	$sql .= $db->plimit(50);
+	$resql = $db->query($sql);
+	$rows = array();
+	if ($resql) {
+		while ($o = $db->fetch_object($resql)) {
+			$rows[] = $o;
+		}
+		$db->free($resql);
+	}
+
+	if (!$rows) {
+		print '<div class="opacitymedium">'.$langs->trans('PharmacyDispatchNoPending').'</div>';
+	} else {
+		print '<div class="div-table-responsive-no-min">';
+		print '<table class="liste">';
+		print '<tr class="liste_titre">';
+		print '<th>'.$langs->trans('PharmacyOrderRef').'</th>';
+		print '<th>'.$langs->trans('Supplier').'</th>';
+		print '<th class="center">'.$langs->trans('Date').'</th>';
+		print '<th class="right">'.$langs->trans('AmountHT').'</th>';
+		print '<th class="center">'.$langs->trans('PharmacyDispatchLines').' / '.$langs->trans('PharmacyDispatchReceived').'</th>';
+		print '<th class="center">'.$langs->trans('PharmacyPurchaseCart').'</th>';
+		print '</tr>';
+		foreach ($rows as $row) {
+			print '<tr class="oddeven">';
+			print '<td><a href="'.$_SERVER['PHP_SELF'].'?id='.((int) $row->rowid).'">'.dol_escape_htmltag((string) $row->ref).'</a></td>';
+			print '<td>'.dol_escape_htmltag((string) $row->supplier).'</td>';
+			print '<td class="center">'.dol_print_date($db->jdate($row->date_creation), 'day').'</td>';
+			print '<td class="right">'.price((float) $row->total_ht).'</td>';
+			print '<td class="center">'.(int) $row->nb_lines.' / '.price((float) $row->received).'</td>';
+			print '<td class="center"><a href="'.$_SERVER['PHP_SELF'].'?id='.((int) $row->rowid).'">'.$langs->trans('PharmacyDispatchReceive').'</a></td>';
+			print '</tr>';
+		}
+		print '</table>';
+		print '</div>';
+	}
+
+	llxFooter();
+	$db->close();
+	exit;
+}
+
 print '<h3 class="titlebefore">'.$langs->trans('PharmacyDispatchOrder').' '.$order->getNomUrl().'</h3>';
 print $order->getLibStatut();
 
 // Already received quantity per order line, from the core reception batches.
-$sql = "SELECT fk_elementdet, SUM(qty) q FROM ".$db->prefix()."receptiondet_batch";
-$sql .= " WHERE fk_element = ".((int) $order->id);
-$sql .= " GROUP BY fk_elementdet";
-$resql = $db->query($sql);
 $received = array();
-while ($obj = $db->fetch_object($resql)) {
-	$received[(int) $obj->fk_elementdet] = (float) $obj->q;
+foreach ($order->lines as $line) {
+	$received[(int) $line->id] = pharmacy_received_qty($db, (int) $order->id, (int) $line->id);
 }
 
 print '<form method="POST" action="'.$_SERVER['PHP_SELF'].'">';

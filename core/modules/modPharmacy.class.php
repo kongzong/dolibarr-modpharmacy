@@ -238,6 +238,21 @@ class modPharmacy extends DolibarrModules
 		$this->menu[$r++] = array(
 			'fk_menu' => 'fk_mainmenu=clinic,fk_leftmenu=clinic_pharmacy',
 			'type' => 'left',
+			'titre' => 'PharmacyPurchaseList',
+			'mainmenu' => 'clinic',
+			'leftmenu' => 'pharmacy_purchase_list',
+			'prefix' => img_picto('', 'fa-file-invoice_fas_#546e7a', 'class="paddingright pictofixedwidth"'),
+			'url' => '/pharmacy/purchase_list.php',
+			'langs' => 'pharmacy@pharmacy',
+			'position' => 1308,
+			'enabled' => 'isModEnabled("pharmacy")',
+			'perms' => '$user->hasRight("pharmacy", "purchase") || $user->hasRight("pharmacy", "dispatch")',
+			'target' => '',
+			'user' => 2,
+		);
+		$this->menu[$r++] = array(
+			'fk_menu' => 'fk_mainmenu=clinic,fk_leftmenu=clinic_pharmacy',
+			'type' => 'left',
 			'titre' => 'PharmacyDispatch',
 			'mainmenu' => 'clinic',
 			'leftmenu' => 'pharmacy_dispatch',
