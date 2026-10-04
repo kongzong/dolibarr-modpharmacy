@@ -79,6 +79,7 @@ PharmacyExpiryStatExpired=Expired
 PharmacyExpiryStatCritical=Within 30 d
 PharmacyExpiryStatWindow=In window
 PharmacyExpiryStatTotal=Alerted batches
+PharmacyExpiryViewAll=All batches
 PharmacyErrNotIssued=Prescription is not issued or cannot be dispensed
 PharmacyErrAlreadyPending=A non-returned dispense sheet already exists for this prescription
 PharmacyErrWarehouseRequired=Select a warehouse

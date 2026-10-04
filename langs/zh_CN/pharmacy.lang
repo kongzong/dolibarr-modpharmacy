@@ -75,6 +75,7 @@ PharmacyExpiryStatExpired=已过期
 PharmacyExpiryStatCritical=30 天内
 PharmacyExpiryStatWindow=窗口期内
 PharmacyExpiryStatTotal=预警批次
+PharmacyExpiryViewAll=全部批次
 PharmacyErrNotIssued=处方未签发或状态不允许发药
 PharmacyErrAlreadyPending=该处方已有未退回的发药单
 PharmacyErrWarehouseRequired=请选择发药仓库

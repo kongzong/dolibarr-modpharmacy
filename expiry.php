@@ -66,6 +66,11 @@ $wid = GETPOSTINT('wid');
 if ($wid < 0) {
 	$wid = 0;
 }
+// Optional pre-filter from the workbench todo list: mode=expired shows only
+// the already-expired batches, mode=soon only the ones still inside the
+// window. Any other value shows everything (the default full view).
+$mode = GETPOST('mode', 'alpha');
+$modeFilter = ($mode === 'expired' || $mode === 'soon') ? $mode : '';
 $action = GETPOST('action', 'aZ09');
 $canDispose = $user->hasRight('pharmacy', 'dispose');
 
@@ -148,6 +153,9 @@ if ($resql) {
 if (count($warehouses) > 1) {
 	print '<form method="GET" action="'.$_SERVER["PHP_SELF"].'" name="formexpiryfilter">';
 	print '<input type="hidden" name="token" value="'.newToken().'">';
+	if ($modeFilter !== '') {
+		print '<input type="hidden" name="mode" value="'.dol_escape_htmltag($modeFilter).'">';
+	}
 	print '<span class="opacitymedium">'.$langs->trans("PharmacyExpiryWarehouse").':</span> ';
 	print '<select name="wid" class="minwidth200" onchange="this.form.submit()">';
 	print '<option value="0">'.$langs->trans("PharmacyExpiryAllWarehouses").'</option>';
@@ -160,8 +168,24 @@ if (count($warehouses) > 1) {
 $alert = new PharmacyExpiryAlert($db);
 $rows = $alert->collect($window, $wid);
 
-// ---- Stat pills: expired / within 30 d / rest of window / total ----
+// ---- Optional pre-filter (workbench drill-down): keep only the tier the
+// todo link points at, so the click lands on exactly the counted rows.
 $now = dol_now();
+if ($modeFilter !== '') {
+	$filtered = array();
+	foreach ($rows as $r) {
+		$eff = $r['sellby'] > 0 ? $r['sellby'] : $r['eatby'];
+		$days = $eff > 0 ? (int) floor(($eff - $now) / 86400) : 999;
+		if ($modeFilter === 'expired' && $days < 0) {
+			$filtered[] = $r;
+		} elseif ($modeFilter === 'soon' && $days >= 0) {
+			$filtered[] = $r;
+		}
+	}
+	$rows = $filtered;
+}
+
+// ---- Stat pills: expired / within 30 d / rest of window / total ----
 $nExpired = 0;
 $nCritical = 0;
 $nWindow = 0;
@@ -177,6 +201,10 @@ foreach ($rows as $r) {
 	}
 }
 print '<div class="fichecenter marginbottomshort">';
+if ($modeFilter !== '') {
+	$clearUrl = dol_buildpath('/pharmacy/expiry.php', 1).'?wid='.((int) $wid);
+	print '<a href="'.$clearUrl.'" class="badge badge-status4" style="margin:2px;" title="'.dol_escape_htmltag($langs->trans("PharmacyExpiryViewAll")).'">'.$langs->trans("PharmacyExpiryViewAll").' ✕</a> ';
+}
 print '<span class="badge badge-status8" style="margin:2px;">'.$langs->trans("PharmacyExpiryStatExpired").' '.$nExpired.'</span> ';
 print '<span class="badge badge-status1" style="margin:2px;">'.$langs->trans("PharmacyExpiryStatCritical").' '.$nCritical.'</span> ';
 print '<span class="badge badge-status0" style="margin:2px;">'.$langs->trans("PharmacyExpiryStatWindow").' '.$nWindow.'</span> ';
@@ -214,7 +242,7 @@ foreach ($rows as $r) {
 	// Disposition links (dispose permission): scrap the whole batch, or
 	// hold / release it (hold = excluded from FEFO dispensing).
 	$rowQty = price2num($r['qty'], 'MS');
-	$actionUrl = $_SERVER["PHP_SELF"].'?wid='.((int) $wid).'&token='.newToken().'&product='.((int) $r['fk_product']).'&batch='.urlencode($r['batch']).'&qty='.$rowQty.'&dispose_wid='.((int) $r['fk_entrepot']);
+	$actionUrl = $_SERVER["PHP_SELF"].'?wid='.((int) $wid).($modeFilter !== '' ? '&mode='.$modeFilter : '').'&token='.newToken().'&product='.((int) $r['fk_product']).'&batch='.urlencode($r['batch']).'&qty='.$rowQty.'&dispose_wid='.((int) $r['fk_entrepot']);
 	$dispCell = '';
 	if ($canDispose) {
 		$links = array();
