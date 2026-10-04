@@ -771,8 +771,12 @@ class Dispense extends CommonObject
 		}
 		$this->db->free($resql);
 		if ($remaining > 0.0000001) {
-			if ($excludedQty + $remaining <= $reel + 0.0000001 && $excludedQty > 0.0000001) {
-				// The shortage is explained by expired / held batches alone.
+			// The shortage is explained by expired / held batches alone when
+			// the still-valid quantity (reel minus the excluded batches) can
+			// never have covered the need — including the extreme case where
+			// valid is 0 (all batches excluded), which a reel-based sum alone
+			// misses.
+			if ($excludedQty > 0.0000001 && ($reel - $excludedQty) < $qtyNeeded - 0.0000001) {
 				throw new PharmacyExpiryOnlyException();
 			}
 			return null; // batch rows can't cover the need (data inconsistency)
