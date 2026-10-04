@@ -236,4 +236,31 @@ class PharmacyOpsTest extends \PHPUnit\Framework\TestCase
 			$this->assertStringContainsString('/main.inc.php', $src, $page.': bootstraps Dolibarr');
 		}
 	}
+
+	/**
+	 * fetchLines() returns stdClass rows, so the pages must use $l->field.
+	 * Array access on stdClass is a fatal error mid-page ("Cannot use object of
+	 * type stdClass as array"), which is how the stock count sheet page died.
+	 */
+	public function testDetailPagesUseObjectAccessOnRows()
+	{
+		foreach (array('stock_count_card.php', 'recall.php') as $page) {
+			$src = file_get_contents(__DIR__.'/../../'.$page);
+			$this->assertSame(0, preg_match('/\$l\[[\'"]/', $src), $page.': rows are stdClass, use $l->field');
+		}
+	}
+
+	/**
+	 * An empty list must not render a pagination bar: print_barre_liste() then
+	 * computes a page count from 0 and prints a stray page number.
+	 */
+	public function testPaginationIsSkippedOnEmptyLists()
+	{
+		foreach (array('stock_count.php', 'recall.php') as $page) {
+			$src = file_get_contents(__DIR__.'/../../'.$page);
+			$this->assertStringContainsString('if ($total > 0) {', $src, $page.': pagination guarded by row count');
+		}
+		$cls = file_get_contents(__DIR__.'/../../class/pharmacystockcount.class.php');
+		$this->assertStringContainsString('$this->refreshTotals();', $cls, 'a fresh sheet shows its totals right away');
+	}
 }

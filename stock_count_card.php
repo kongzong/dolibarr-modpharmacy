@@ -142,7 +142,7 @@ if ($action === 'save' && !$posted) {
 		$errors = 0;
 		if (is_array($counted)) {
 			foreach ($dao->lines as $l) {
-				$lineId = (int) $l['rowid'];
+				$lineId = (int) $l->rowid;
 				if (!array_key_exists($lineId, $counted)) {
 					continue;
 				}
@@ -172,7 +172,7 @@ if ($action === 'post' && !$posted) {
 	$counted = GETPOST('counted', 'array');
 	if (is_array($counted)) {
 		foreach ($dao->lines as $l) {
-			$lineId = (int) $l['rowid'];
+			$lineId = (int) $l->rowid;
 			if (!array_key_exists($lineId, $counted)) {
 				continue;
 			}
@@ -237,21 +237,21 @@ print '</tr>';
 
 $todo = 0;
 foreach ($dao->lines as $l) {
-	$isTodo = ($l['qty_counted'] === null);
+	$isTodo = ($l->qty_counted === null);
 	if ($isTodo) {
 		$todo++;
 	}
-	$label = trim((string) $l['product_label'].' ['.$l['product_ref'].']');
-	$expired = (!empty($l['sellby']) && $l['sellby'] < date('Y-m-d'));
+	$label = trim((string) $l->product_label.' ['.$l->product_ref.']');
+	$expired = (!empty($l->sellby) && $l->sellby < date('Y-m-d'));
 	print '<tr class="oddeven'.($expired ? ' error' : '').'">';
 	print '<td>'.dol_escape_htmltag($label).'</td>';
-	print '<td>'.dol_escape_htmltag((string) $l['batch']).'</td>';
-	print '<td class="center nowrap">'.(!empty($l['sellby']) ? dol_print_date($db->jdate($l['sellby']), 'day') : '').'</td>';
-	print '<td class="right">'.number_format((float) $l['qty_book'], 3, '.', '').'</td>';
+	print '<td>'.dol_escape_htmltag((string) $l->batch).'</td>';
+	print '<td class="center nowrap">'.(!empty($l->sellby) ? dol_print_date($db->jdate($l->sellby), 'day') : '').'</td>';
+	print '<td class="right">'.number_format((float) $l->qty_book, 3, '.', '').'</td>';
 	print '<td class="right">'.($posted
-		? '<span'.($isTodo ? ' class="error"' : '').'>'.($isTodo ? '-' : number_format((float) $l['qty_counted'], 3, '.', '')).'</span>'
-		: '<input type="text" class="right minwidth80" name="counted['.(int) $l['rowid'].']" value="'.($isTodo ? '' : dol_escape_htmltag((string) $l['qty_counted'])).'">').'</td>';
-	print '<td class="right">'.($isTodo ? '' : number_format((float) $l['qty_diff'], 3, '.', '')).'</td>';
+		? '<span'.($isTodo ? ' class="error"' : '').'>'.($isTodo ? '-' : number_format((float) $l->qty_counted, 3, '.', '')).'</span>'
+		: '<input type="text" class="right minwidth80" name="counted['.(int) $l->rowid.']" value="'.($isTodo ? '' : dol_escape_htmltag((string) $l->qty_counted)).'">').'</td>';
+	print '<td class="right">'.($isTodo ? '' : number_format((float) $l->qty_diff, 3, '.', '')).'</td>';
 	print '</tr>';
 }
 print '</table></div>';

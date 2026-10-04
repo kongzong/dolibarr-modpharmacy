@@ -190,6 +190,10 @@ class PharmacyStockCount
 			$this->status = self::STATUS_DRAFT;
 			$this->note = $note;
 			$this->fk_user_creat = (int) $user->id;
+			// Fill the header totals right away, otherwise a freshly created
+			// sheet shows 0.000 / 0.000 / 0.000 until the first save.
+			$this->refreshTotals();
+			$this->fetchLines();
 			return $countId;
 		} catch (Exception $e) {
 			$this->rollbackAll();

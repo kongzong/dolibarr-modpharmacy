@@ -403,7 +403,12 @@ foreach ($rows as $r) {
 }
 print '</table></div>';
 
-print_barre_liste('', $page, $_SERVER["PHP_SELF"], $param, '', '', '', $total, $total, 'fa-bullhorn', 0, '', '', $limit, 0, 0, 1);
+// Pagination only when there is something to paginate: with $total = 0
+// print_barre_liste() computes a nonsensical page count and renders a
+// stray page number on an empty list.
+if ($total > 0) {
+	print_barre_liste('', $page, $_SERVER["PHP_SELF"], $param, '', '', '', $total, $total, 'fa-bullhorn', 0, '', '', $limit, 0, 0, 1);
+}
 
 llxFooter();
 $db->close();
