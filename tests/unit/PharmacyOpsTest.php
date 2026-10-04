@@ -204,4 +204,31 @@ class PharmacyOpsTest extends \PHPUnit\Framework\TestCase
 		$this->assertStringContainsString('CREATE TABLE llx_pharmacy_recall(', $recall);
 		$this->assertStringContainsString('CREATE TABLE llx_pharmacy_recall_line(', $recall);
 	}
+
+	/**
+	 * Pagination uses print_barre_liste(); there is no load_barre_liste() in
+	 * this Dolibarr version, and calling it is a FATAL error (not a warning),
+	 * so the page dies with a stack trace instead of rendering.
+	 */
+	public function testPaginationUsesTheExistingBarreListe()
+	{
+		foreach (array('stock_count.php', 'recall.php') as $page) {
+			$src = file_get_contents(__DIR__.'/../../'.$page);
+			$this->assertStringNotContainsString('load_barre_liste(', $src, $page.': load_barre_liste() does not exist');
+			$this->assertStringContainsString('print_barre_liste(', $src, $page.': uses print_barre_liste()');
+		}
+	}
+
+	/**
+	 * Every page must bootstrap Dolibarr: that include is what makes the core
+	 * functions (print_barre_liste, price, dol_print_date...) available, and a
+	 * page without it dies on the first core call.
+	 */
+	public function testPagesBootstrapDolibarr()
+	{
+		foreach (array('stock_count.php', 'stock_count_card.php', 'recall.php', 'trace_batch.php', 'report_expiry_action.php') as $page) {
+			$src = file_get_contents(__DIR__.'/../../'.$page);
+			$this->assertStringContainsString('/main.inc.php', $src, $page.': bootstraps Dolibarr');
+		}
+	}
 }

@@ -168,7 +168,7 @@ foreach ($rows as $r) {
 }
 print '</table></div>';
 
-print load_barre_liste($total, $page, $limit, $total, $param, '', '', '', '');
+print_barre_liste($langs->trans("PharmacyStockCountList"), $page, $_SERVER["PHP_SELF"], $param, '', '', '', $total, $total, 'fa-clipboard-check', 0, '', '', $limit, 0, 0, 1);
 
 llxFooter();
 $db->close();
