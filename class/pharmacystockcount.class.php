@@ -274,9 +274,12 @@ class PharmacyStockCount
 	}
 
 	/**
+	 * Reload the detail lines. Public because the sheet page refreshes them in
+	 * place after saving the counted quantities.
+	 *
 	 * @return	int	1 ok, -1 error
 	 */
-	private function fetchLines()
+	public function fetchLines()
 	{
 		$P = $this->db->prefix();
 		$sql = sprintf(

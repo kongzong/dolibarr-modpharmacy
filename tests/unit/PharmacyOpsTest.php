@@ -282,4 +282,52 @@ class PharmacyOpsTest extends \PHPUnit\Framework\TestCase
 		$this->assertStringContainsString('header(', $branch, 'the not-found branch redirects');
 		$this->assertRegExp('/exit;\s*$/', trim($branch), 'the not-found branch exits instead of falling through');
 	}
+
+	/**
+	 * A form whose action only exists on its submit button is unreachable when
+	 * the submit carries no submitter: JS form.submit(), and Enter in some
+	 * browsers, send the hidden fields only. The page then falls through every
+	 * action branch and silently re-renders, dropping the input.
+	 *
+	 * The sheet form and the recall notify form both need a hidden default.
+	 * The save/post buttons still override it because a submit button is
+	 * serialised after the hidden fields, so the later pair wins.
+	 */
+	public function testActionFormsCarryAHiddenDefaultAction()
+	{
+		$checks = array(
+			'stock_count_card.php' => 'value="save"',
+			'recall.php' => 'value="notify"',
+		);
+		foreach ($checks as $page => $needle) {
+			$src = file_get_contents(__DIR__.'/../../'.$page);
+			$this->assertStringContainsString(
+				'<input type="hidden" name="action" '.$needle,
+				$src,
+				$page.': the form declares a default action, so a submit without a submitter still works'
+			);
+		}
+	}
+
+	/**
+	 * A page calling a private method dies with "Call to private method" AFTER
+	 * the work already ran, so the data is written but the user gets a blank
+	 * page and a redirect that never happens. Every method a page touches has
+	 * to be public.
+	 */
+	public function testPagesOnlyCallPublicMethods()
+	{
+		foreach (array('pharmacystockcount.class.php' => 'stock_count_card.php', 'pharmacyrecall.class.php' => 'recall.php') as $clsFile => $page) {
+			$cls = file_get_contents(__DIR__.'/../../class/'.$clsFile);
+			$pageSrc = file_get_contents(__DIR__.'/../../'.$page);
+			preg_match_all('/(?:private|protected)\s+function\s+(\w+)\s*\(/', $cls, $m);
+			foreach ($m[1] as $method) {
+				$this->assertSame(
+					0,
+					preg_match('/->'.preg_quote($method, '/').'\s*\(/', $pageSrc),
+					$page.' must not call the non-public '.$method.'()'
+				);
+			}
+		}
+	}
 }

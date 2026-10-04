@@ -224,6 +224,11 @@ print '</div>';
 print '<form method="POST" action="'.$_SERVER["PHP_SELF"].'" name="formstockcountcard">';
 print '<input type="hidden" name="token" value="'.newToken().'">';
 print '<input type="hidden" name="id" value="'.$dao->id.'">';
+// Default action for the sheet form. The save/post buttons still override it
+// through their own name/value, but a submit carrying no submitter (JS
+// form.submit(), Enter in some browsers) would otherwise reach no branch at
+// all and silently re-render the sheet with the input lost.
+print '<input type="hidden" name="action" value="save">';
 
 print '<div class="div-table-responsive-no-min"><table class="noborder centpercent">';
 print '<tr class="liste_titre">';

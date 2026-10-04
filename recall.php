@@ -266,6 +266,9 @@ if ($id > 0) {
 	print '<form method="POST" action="'.$_SERVER["PHP_SELF"].'" name="formrecallnotify">';
 	print '<input type="hidden" name="token" value="'.newToken().'">';
 	print '<input type="hidden" name="id" value="'.$dao->id.'">';
+	// Default action, same reason as the stock count sheet form: a submit with
+	// no submitter would reach no branch and the flags would be dropped.
+	print '<input type="hidden" name="action" value="notify">';
 	print '<div class="div-table-responsive-no-min margintop"><table class="noborder centpercent">';
 	print '<tr class="liste_titre">';
 	print '<th style="width:28px;">&nbsp;</th>';
