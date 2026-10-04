@@ -303,7 +303,16 @@ if (empty($rows)) {
 foreach ($rows as $r) {
 	print '<tr class="oddeven">';
 	print '<td class="nowrap"><a href="'.dol_buildpath('/product/card.php', 1).'?id='.((int) $r->fk_product).'">'.dol_escape_htmltag((string) $r->plabel).'</a></td>';
-	print '<td class="right">'.(int) $r->nb_dispense.'</td>';
+	// The dispensing count opens the sheets behind the number; the report runs
+	// on date_dispense, so the list has to filter the same column.
+	$drill = '/pharmacy/list.php?search_fk_product='.(int) $r->fk_product.'&date_field=date_dispense';
+	if (GETPOSTINT('search_fromyear')) {
+		$drill .= '&search_fromyear='.GETPOSTINT('search_fromyear').'&search_frommonth='.GETPOSTINT('search_frommonth').'&search_fromday='.GETPOSTINT('search_fromday');
+	}
+	if (GETPOSTINT('search_toyear')) {
+		$drill .= '&search_toyear='.GETPOSTINT('search_toyear').'&search_tomonth='.GETPOSTINT('search_tomonth').'&search_today='.GETPOSTINT('search_today');
+	}
+	print '<td class="right"><a href="'.dol_buildpath($drill, 1).'" title="'.$langs->trans("PharmacyReportDrillHint").'">'.(int) $r->nb_dispense.'</a></td>';
 	print '<td class="right">'.number_format((float) $r->total_qty, 3).'</td>';
 	// The unit is per line (g for herbs, 盒/支/袋 for patent medicines): list the
 	// distinct units seen for this product so the mixed-scale total is readable.

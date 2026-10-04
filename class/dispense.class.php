@@ -226,14 +226,22 @@ class Dispense extends CommonObject
 		} else {
 			$where .= " AND d.status <> ".PHARMACY_STATUS_RETURNED;
 		}
+		// The list dates dispensings on date_creation by default; the dashboard
+		// charts them on date_dispense, so a drill-down passes date_field to
+		// keep the two views agreeing.
+		$dateField = (isset($f['date_field']) && $f['date_field'] === 'date_dispense') ? 'd.date_dispense' : 'd.date_creation';
 		if (!empty($f['from'])) {
-			$where .= " AND d.date_creation >= '".$this->db->idate((int) $f['from'])."'";
+			$where .= " AND ".$dateField." >= '".$this->db->idate((int) $f['from'])."'";
 		}
 		if (!empty($f['to'])) {
-			$where .= " AND d.date_creation <= '".$this->db->idate((int) $f['to'])."'";
+			$where .= " AND ".$dateField." <= '".$this->db->idate((int) $f['to'])."'";
 		}
 		if (!empty($f['fk_patient'])) {
 			$where .= " AND d.fk_patient = ".((int) $f['fk_patient']);
+		}
+		// Lets the stock-structure chart drill down into one product's sheets.
+		if (!empty($f['fk_product'])) {
+			$where .= " AND d.rowid IN (SELECT dl.fk_dispense FROM ".$this->db->prefix()."pharmacy_dispense_line as dl WHERE dl.fk_product = ".((int) $f['fk_product']).")";
 		}
 		if (!empty($f['fk_prescription'])) {
 			$where .= " AND d.fk_prescription = ".((int) $f['fk_prescription']);
@@ -548,7 +556,10 @@ class Dispense extends CommonObject
 					if ($result < 0) {
 						throw new RuntimeException('stock movement failed: '.$movement->error);
 					}
-					$notes[] = $a['batch'].($a['sellby'] ? '/'.dol_print_date($a['sellby'], 'day') : '');
+					// ISO date, not dol_print_date(): batch_note is parsed back by
+					// the batch traceability page, and dol_print_date follows the
+					// UI locale (it wrote 03/10/2027 under en_US).
+					$notes[] = $a['batch'].($a['sellby'] ? '/'.date('Y-m-d', (int) $a['sellby']) : '');
 					$stockReservations[$a['batch']] = (isset($stockReservations[$a['batch']]) ? $stockReservations[$a['batch']] : 0) + $a['qty'];
 				}
 				$sql = "UPDATE ".$this->db->prefix()."pharmacy_dispense_line SET batch_note = '".$this->db->escape(implode(', ', $notes))."'";

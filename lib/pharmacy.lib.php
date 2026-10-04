@@ -261,3 +261,64 @@ function pharmacy_retail_checkout($db, $user, array $cart, $warehouseId, $channe
 	}
 	return 1;
 }
+
+/**
+ * Parse the batch list Dispense::confirm() writes into
+ * pharmacy_dispense_line.batch_note ("BATCH/2027-10-03, BATCH2/...").
+ *
+ * Kept as a helper because the note is free text: any consumer that needs the
+ * batches of a dispensing line has to split it the same way, and the format is
+ * defined in exactly one place (Dispense::confirm()).
+ *
+ * @param	string	$note		Value of pharmacy_dispense_line.batch_note
+ * @return	string[]			Batch numbers, in the order they were written
+ */
+function pharmacy_parse_batch_note($note)
+{
+	$out = array();
+	foreach (explode(',', (string) $note) as $chunk) {
+		$parts = explode('/', trim($chunk));
+		$batch = trim($parts[0]);
+		if ($batch !== '') {
+			$out[] = $batch;
+		}
+	}
+	return $out;
+}
+
+/**
+ * Read the dispensing sheet reference out of a stock movement label.
+ *
+ * Dispense::confirm() writes "Dispense {ref}" on the outbound movements and
+ * Dispense::returnSheet() writes "Return {ref}" on the ones that put the goods
+ * back, so the label is the only link from a stock movement to its sheet.
+ *
+ * @param	string	$label		llx_stock_mouvement.label
+ * @return	string				Sheet ref, or '' when the label is not ours
+ */
+function pharmacy_movement_sheet_ref($label)
+{
+	$label = trim((string) $label);
+	foreach (array('Dispense ', 'Return ') as $prefix) {
+		if (strpos($label, $prefix) === 0) {
+			return trim(substr($label, strlen($prefix)));
+		}
+	}
+	return '';
+}
+
+/**
+ * @param	string	$label		llx_stock_mouvement.label
+ * @return	int					1 outbound, -1 returned to stock, 0 not a dispensing movement
+ */
+function pharmacy_movement_direction($label)
+{
+	$label = trim((string) $label);
+	if (strpos($label, 'Dispense ') === 0) {
+		return 1;
+	}
+	if (strpos($label, 'Return ') === 0) {
+		return -1;
+	}
+	return 0;
+}

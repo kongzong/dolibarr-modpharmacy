@@ -73,7 +73,7 @@ $conf->file = new stdClass();
 $conf->file->instance_unique_id = 'test-instance-key';
 $conf->entity = 1;
 
-$testFiles = array('PharmacyTest.php', 'PharmacyNumberingTest.php');
+$testFiles = array('PharmacyTest.php', 'PharmacyNumberingTest.php', 'PharmacyTraceTest.php');
 
 $pass = 0; $fail = 0;
 foreach ($testFiles as $file) {

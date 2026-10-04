@@ -300,7 +300,8 @@ foreach ($rows as $r) {
 	// delta cell below; the row itself stays a plain oddeven.
 	print '<tr class="oddeven">';
 	print '<td class="nowrap"><a href="'.dol_buildpath('/product/card.php', 1).'?id='.((int) $r->fk_product).'">'.dol_escape_htmltag((string) $r->plabel).'</a></td>';
-	print '<td class="nowrap">'.dol_escape_htmltag((string) $r->batch).'</td>';
+	// The batch number opens its traceability sheet (receipts vs dispensings).
+	print '<td class="nowrap"><a href="'.dol_buildpath('/pharmacy/trace_batch.php', 1).'?product='.(int) $r->fk_product.'&batch='.urlencode((string) $r->batch).'&wid='.(int) $r->fk_entrepot.'">'.dol_escape_htmltag((string) $r->batch).'</a></td>';
 	print '<td class="right">'.number_format((float) $r->batch_qty, 3).'</td>';
 	print '<td class="right">'.number_format((float) $r->reel, 3).'</td>';
 	// A stock row whose batches do not add up to the on-hand quantity is flagged red.

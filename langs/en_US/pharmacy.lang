@@ -1,4 +1,8 @@
 # modPharmacy language file - en_US
+
+# --- Decanting log (GSP art.164 (9), 2026-09-30) ---
+
+# --- Expiry disposition (2026-10-02) ---
 ModulePharmacyName=Pharmacy dispensing
 ModulePharmacyDesc=Dispensing and expiry: dispense signed prescriptions with FEFO batch picking, returns with reverse stock, expiry alerts
 ModulePharmacyDescLong=Pharmacy module for TCM clinics: create a dispense sheet from a signed prescription; confirming deducts stock with FEFO (first-expiry-first-out) batch allocation and fails the whole sheet on shortage; a return books the batches back in and allows re-dispensing; dispense sheet PDF; expiry alert page and daily cron (WeCom push off by default). Dispensing is idempotent; the prescription state moves through modPrescription bridge methods.
@@ -119,8 +123,6 @@ PharmacyRetailBatchHint=Only batch-managed products can be sold at retail (dispe
 PharmacyRetailNoBatch=%s has no batch management, cannot be dispensed at retail (enable batches/expiry on the product first)
 PharmacyRetailNoBatchShort=No batch
 PharmacyRetailNoBatchHint=Not sellable
-
-# --- Decanting log (GSP art.164 (9), 2026-09-30) ---
 PharmacyDecant=Decanting log
 PharmacyDecantNew=New entry
 PharmacyDecantOp=Action
@@ -143,8 +145,6 @@ PharmacyDecantErrDate=Enter a valid date
 PharmacyDecantErrChecker=Enter the checker name
 PharmacyDecantFilterAll=All actions
 PharmacyDecantListEmpty=No entries yet
-
-# --- Expiry disposition (2026-10-02) ---
 PharmacyExpiryActionCol=Disposition
 PharmacyExpiryScrap=Scrap
 PharmacyExpiryBlock=Hold
@@ -244,3 +244,50 @@ PharmacyPoStatusAccepted=Approved
 PharmacyPoStatusOrdered=Ordered (to receive)
 PharmacyPoStatusPartially=Partially received
 PharmacyPoStatusComplete=Received
+PharmacyExpiryActionReport=Expiry disposition ledger
+PharmacyExpiryOp=Disposition
+PharmacyExpiryOpScrap=Scrap
+PharmacyExpiryOpBlock=Block sale
+PharmacyExpiryOpUnblock=Unblock
+PharmacyExpiryOpUser=Done by
+PharmacyExpiryBatches=Near-expiry batches
+PharmacyExpiryOpen=Open
+PharmacyExpiryActionCount=Disposition actions
+PharmacyExpiryBatchesTitle=Batches and their disposition (last %s days)
+PharmacyExpiryDate=Expiry
+PharmacyTraceQty=Quantity
+PharmacyExpiryState=Disposition
+PharmacyExpiryBlockedShort=Blocked
+PharmacyExpiryOpenShort=Normal
+PharmacyExpiryDispose=Dispose
+PharmacyExpiryActionTitle=Disposition trail
+PharmacyExpiryActionNone=No disposition in this period
+PharmacyTraceBatch=Batch traceability
+PharmacyTracePick=Pick a batch
+PharmacyTraceOnHand=On hand
+PharmacyTraceRecon=Reconciliation
+PharmacyTraceIn=Received
+PharmacyTraceOut=Dispensed
+PharmacyTraceExpected=Expected
+PharmacyTraceOk=Reconciled
+PharmacyTraceDiff=Difference
+PharmacyTraceInbound=Inbound
+PharmacyTraceOutbound=Outbound
+PharmacyTraceSupplier=Supplier
+PharmacyTraceOrder=Goods receipt
+PharmacyTraceSheet=Dispensing sheet
+PharmacyTraceNoInbound=No goods receipt for this batch
+PharmacyTraceNoOutbound=No dispensing for this batch
+PharmacyTraceNotFound=Batch not found in stock
+PharmacyLedgerDate=Date
+ClearFilter=Clear filters
+PharmacyTraceNoReceipts=No inbound record, cannot reconcile
+PharmacyTraceNoReceiptsHint=This batch has no goods receipt, so its balance comes from opening stock or a legacy import; no reconciliation is attempted.
+PharmacyTraceBack=Returned
+PharmacyTraceColDirection=Direction
+PharmacyTraceMoveOut=Dispensed
+PharmacyTraceMoveBack=Returned
+PharmacyTraceNoMovements=No stock movement for this batch
+PharmacyTraceNoMovementsHint=Note: stock movements are only written when a dispensing sheet is confirmed. No movement here means the batch left stock without confirmation, or came in through opening stock.
+PharmacyReportDrillHint=Show the dispensing sheets of this product
+PharmacyReportColProductRef=Product ref

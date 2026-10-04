@@ -63,12 +63,18 @@ $status = ($searchStatus !== '' && is_numeric($searchStatus)) ? (int) $searchSta
 $dateFrom = dol_mktime(0, 0, 0, GETPOSTINT('search_frommonth'), GETPOSTINT('search_fromday'), GETPOSTINT('search_fromyear'));
 $dateTo = dol_mktime(23, 59, 59, GETPOSTINT('search_tomonth'), GETPOSTINT('search_today'), GETPOSTINT('search_toyear'));
 $searchFkPatient = GETPOSTINT('search_fk_patient');
+$searchFkProduct = GETPOSTINT('search_fk_product');
+// The list dates dispensings on date_creation; the dashboard charts them on
+// date_dispense, so a drill-down passes date_field to keep both views equal.
+// 'aZ' would strip the underscore, so alphanohtml keeps "date_dispense" intact.
+$dateField = GETPOST('date_field', 'alphanohtml') === 'date_dispense' ? 'date_dispense' : 'date_creation';
 if (GETPOST('button_removefilter_x', 'alpha') || GETPOST('button_removefilter', 'alpha')) {
 	$search = '';
 	$status = -1;
 	$dateFrom = '';
 	$dateTo = '';
 	$searchFkPatient = 0;
+	$searchFkProduct = 0;
 }
 
 $limit = GETPOSTINT('limit') > 0 ? GETPOSTINT('limit') : $conf->liste_limit;
@@ -79,7 +85,7 @@ if ($page < 0) {
 $offset = $limit * $page;
 
 $dao = new Dispense($db);
-$result = $dao->search(array('q' => $search, 'status' => $status, 'from' => $dateFrom, 'to' => $dateTo, 'fk_patient' => $searchFkPatient), $limit, $offset);
+$result = $dao->search(array('q' => $search, 'status' => $status, 'from' => $dateFrom, 'to' => $dateTo, 'fk_patient' => $searchFkPatient, 'fk_product' => $searchFkProduct, 'date_field' => $dateField), $limit, $offset);
 if ($result === null) {
 	dol_print_error($db, $dao->error);
 	exit;
@@ -105,9 +111,16 @@ if ($dateTo) {
 if ($searchFkPatient > 0) {
 	$param .= '&search_fk_patient='.(int) $searchFkPatient;
 }
+if ($searchFkProduct > 0) {
+	$param .= '&search_fk_product='.(int) $searchFkProduct;
+}
+if ($dateField === 'date_dispense') {
+	$param .= '&date_field=date_dispense';
+}
 
 print '<form method="GET" id="searchFormList" action="'.$_SERVER["PHP_SELF"].'">'."\n";
 print '<input type="hidden" name="limit" value="'.(int) $limit.'">';
+print '<input type="hidden" name="date_field" value="'.dol_escape_htmltag($dateField).'">';
 if ($searchFkPatient > 0) {
 	print '<input type="hidden" name="search_fk_patient" value="'.(int) $searchFkPatient.'">';
 }
@@ -129,12 +142,22 @@ foreach (array(PHARMACY_STATUS_PENDING, PHARMACY_STATUS_DISPENSED, PHARMACY_STAT
 	$statusOptions[(string) $st] = pharmacy_status_label($st);
 }
 
+$productOptions = array();
+$resql = $db->query("SELECT p.rowid, p.ref, p.label FROM ".$db->prefix()."product as p WHERE p.entity IN (".getEntity('product').") ORDER BY p.ref");
+if ($resql) {
+	while ($o = $db->fetch_object($resql)) {
+		$productOptions[(string) $o->rowid] = (string) $o->ref.' - '.(string) $o->label;
+	}
+	$db->free($resql);
+}
+
 print '<div class="div-table-responsive">';
 print '<table class="tagtable liste centpercent">'."\n";
 print '<tr class="liste_titre_filter">';
 print '<td class="liste_titre" colspan="4"><input type="text" name="search" class="minwidth200" placeholder="'.dol_escape_htmltag($langs->trans('PharmacyRef').' / '.$langs->trans('PrescriptionRef').' / '.$langs->trans('PatientCardNo')).'" value="'.dol_escape_htmltag($search).'"></td>';
 print '<td class="liste_titre"></td>';
 print '<td class="liste_titre center nowrap">'.$form->selectDate($dateFrom, 'search_from', 0, 0, 1, '', 1, 0).' - '.$form->selectDate($dateTo, 'search_to', 0, 0, 1, '', 1, 0).'</td>';
+print '<td class="liste_titre center">'.$form->selectarray('search_fk_product', $productOptions, $searchFkProduct > 0 ? (string) $searchFkProduct : '', 1, 0, 0, '', 0, 0, 0, '', 'maxwidth150').'</td>';
 print '<td class="liste_titre center">'.$form->selectarray('search_status', $statusOptions, $status >= 0 ? (string) $status : '', 1, 0, 0, '', 0, 0, 0, '', 'maxwidth100').'</td>';
 print '<td class="liste_titre center maxwidthsearch">';
 print '<button type="submit" class="liste_titre button_search reposition" name="button_search" value="x"><span class="fa fa-search"></span></button>';

@@ -274,9 +274,41 @@ class modPharmacy extends DolibarrModules
 			'prefix' => img_picto('', 'fa-cash-register_fas_#00897b', 'class="paddingright pictofixedwidth"'),
 			'url' => '/pharmacy/retail.php',
 			'langs' => 'pharmacy@pharmacy',
-			'position' => 1300 + $r,
+			// Fixed instead of 1300 + $r: the automatic counter collided with
+			// purchase_list (both landed on 1308, so their order was undefined).
+			'position' => 1306,
 			'enabled' => 'isModEnabled("pharmacy")',
 			'perms' => '$user->hasRight("pharmacy", "write")',
+			'target' => '',
+			'user' => 2,
+		);
+		$this->menu[$r++] = array(
+			'fk_menu' => 'fk_mainmenu=clinic,fk_leftmenu=clinic_pharmacy',
+			'type' => 'left',
+			'titre' => 'PharmacyExpiryActionReport',
+			'mainmenu' => 'clinic',
+			'leftmenu' => 'pharmacy_expiry_action_report',
+			'prefix' => img_picto('', 'fa-clipboard-list_fas_#c62828', 'class="paddingright pictofixedwidth"'),
+			'url' => '/pharmacy/report_expiry_action.php',
+			'langs' => 'pharmacy@pharmacy',
+			'position' => 1300 + $r,
+			'enabled' => 'isModEnabled("pharmacy")',
+			'perms' => '$user->hasRight("pharmacy", "read")',
+			'target' => '',
+			'user' => 2,
+		);
+		$this->menu[$r++] = array(
+			'fk_menu' => 'fk_mainmenu=clinic,fk_leftmenu=clinic_pharmacy',
+			'type' => 'left',
+			'titre' => 'PharmacyTraceBatch',
+			'mainmenu' => 'clinic',
+			'leftmenu' => 'pharmacy_trace_batch',
+			'prefix' => img_picto('', 'fa-search-plus_fas_#00897b', 'class="paddingright pictofixedwidth"'),
+			'url' => '/pharmacy/trace_batch.php',
+			'langs' => 'pharmacy@pharmacy',
+			'position' => 1300 + $r,
+			'enabled' => 'isModEnabled("pharmacy")',
+			'perms' => '$user->hasRight("pharmacy", "read")',
 			'target' => '',
 			'user' => 2,
 		);
