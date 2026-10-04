@@ -263,4 +263,23 @@ class PharmacyOpsTest extends \PHPUnit\Framework\TestCase
 		$cls = file_get_contents(__DIR__.'/../../class/pharmacystockcount.class.php');
 		$this->assertStringContainsString('$this->refreshTotals();', $cls, 'a fresh sheet shows its totals right away');
 	}
+
+	/**
+	 * A sheet id that no longer exists must bounce back to the list with a
+	 * message. Rendering the sheet anyway would either fatal on the missing
+	 * lines or show a blank form the user can save over nothing.
+	 */
+	public function testMissingSheetRedirectsToTheList()
+	{
+		$src = file_get_contents(__DIR__.'/../../stock_count_card.php');
+		$this->assertStringContainsString('if ($rc <= 0) {', $src, 'a failed fetch is handled');
+		$this->assertStringContainsString("PharmacyStockCountErrNotFound", $src, 'shows why it bounced');
+		$this->assertStringContainsString("header('Location: '.dol_buildpath('/pharmacy/stock_count.php', 1));", $src, 'bounces to the list');
+		// The branch must exit, otherwise execution falls through and renders
+		// the sheet page for an object that was never loaded.
+		$branch = substr($src, strpos($src, 'if ($rc <= 0) {'));
+		$branch = substr($branch, 0, strpos($branch, '}'));
+		$this->assertStringContainsString('header(', $branch, 'the not-found branch redirects');
+		$this->assertRegExp('/exit;\s*$/', trim($branch), 'the not-found branch exits instead of falling through');
+	}
 }
