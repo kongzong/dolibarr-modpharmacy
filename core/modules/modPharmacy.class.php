@@ -344,6 +344,8 @@ class modPharmacy extends DolibarrModules
 		);
 		$this->menu[$r++] = array(
 			'fk_menu' => 'fk_mainmenu=clinic,fk_leftmenu=clinic_report',
+			'type' => 'left',
+			'titre' => 'PharmacyReport',
 			'mainmenu' => 'clinic',
 			'leftmenu' => 'pharmacy_report',
 			'prefix' => img_picto('', 'fa-chart-line_fas_#00897b', 'class="paddingright pictofixedwidth"'),
