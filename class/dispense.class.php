@@ -236,14 +236,14 @@ class Dispense extends CommonObject
 		if (!empty($f['to'])) {
 			$where .= " AND ".$dateField." <= '".$this->db->idate((int) $f['to'])."'";
 		}
-		if (!empty($f['fk_patient'])) {
+		if ((int) $f['fk_patient'] > 0) {
 			$where .= " AND d.fk_patient = ".((int) $f['fk_patient']);
 		}
 		// Lets the stock-structure chart drill down into one product's sheets.
-		if (!empty($f['fk_product'])) {
+		if ((int) $f['fk_product'] > 0) {
 			$where .= " AND d.rowid IN (SELECT dl.fk_dispense FROM ".$this->db->prefix()."pharmacy_dispense_line as dl WHERE dl.fk_product = ".((int) $f['fk_product']).")";
 		}
-		if (!empty($f['fk_prescription'])) {
+		if ((int) $f['fk_prescription'] > 0) {
 			$where .= " AND d.fk_prescription = ".((int) $f['fk_prescription']);
 		}
 
