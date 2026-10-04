@@ -222,7 +222,7 @@ print '<table class="noborder centpercent">';
 print '<tr class="liste_titre"><td colspan="4">'.$langs->trans("PharmacyTracePick").'</td></tr>';
 print '<tr>';
 print '<td class="nowrap">'.$langs->trans("PharmacyExpiryProduct").'</td><td class="nowrap">';
-print $form->selectarray('product', $productOptions, $fkProduct > 0 ? (string) $fkProduct : '', 1, 0, 0, '', 0, 0, 0, '', 'maxwidth300');
+print $form->selectarray('product', $productOptions, $fkProduct > 0 ? (string) $fkProduct : '', -1, 0, 0, '', 0, 0, 0, '', 'maxwidth300');
 print '</td>';
 print '<td class="nowrap">'.$langs->trans("PharmacyExpiryBatch").'</td><td class="nowrap">';
 print '<input name="batch" class="minwidth200" value="'.dol_escape_htmltag($batch).'">';

@@ -106,7 +106,7 @@ print '<form method="GET" action="'.$_SERVER["PHP_SELF"].'" name="formstockcount
 print '<table class="noborder centpercent">';
 print '<tr>';
 print '<td class="nowrap">'.$langs->trans("PharmacyWarehouse").'</td><td class="nowrap">';
-print $form->selectarray('search_wh', $warehouses, $wh > 0 ? (string) $wh : '', 1, 0, 0, '', 0, 0, 0, '', 'maxwidth200');
+print $form->selectarray('search_wh', $warehouses, $wh > 0 ? (string) $wh : '', -1, 0, 0, '', 0, 0, 0, '', 'maxwidth200');
 print '</td>';
 print '<td class="nowrap">'.$langs->trans("Status").'</td><td class="nowrap">';
 $statusOptions = array(

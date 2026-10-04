@@ -97,9 +97,9 @@ if ($resqlSup) {
 	}
 	$db->free($resqlSup);
 }
-print '<td class="liste_titre">'.$form->selectarray('fk_soc', $supplierOptions, (string) $socid, 1, 0, 0, 'maxwidth200').'</td>';
+print '<td class="liste_titre">'.$form->selectarray('fk_soc', $supplierOptions, (string) $socid, -1, 0, 0, 'maxwidth200').'</td>';
 print '<td class="liste_titre center nowrap">'.$form->selectDate($dateFrom, 'date_from', 0, 0, 1, '', 1, 0).' - '.$form->selectDate($dateTo, 'date_to', 0, 0, 1, '', 1, 0).'</td>';
-print '<td class="liste_titre center">'.$form->selectarray('search_status', $statusOptions, (string) $status, 1, 0, 0, 'maxwidth150', 0, '', 0, 0, '', 0, 0).'</td>';
+print '<td class="liste_titre center">'.$form->selectarray('search_status', $statusOptions, (string) $status, -1, 0, 0, 'maxwidth150', 0, '', 0, 0, '', 0, 0).'</td>';
 print '<td class="liste_titre center maxwidthsearch">';
 print '<button type="submit" class="liste_titre button_search reposition" name="button_search" value="x"><span class="fa fa-search"></span></button>';
 print '<button type="submit" class="liste_titre button_removefilter reposition" name="button_removefilter" value="x"><span class="fa fa-remove"></span></button>';

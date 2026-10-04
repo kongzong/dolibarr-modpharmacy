@@ -97,7 +97,7 @@ if ($action === 'create' && $id <= 0) {
 	print '<input type="hidden" name="action" value="create">';
 	print '<table class="noborder centpercent">';
 	print '<tr><td class="nowrap">'.$langs->trans("PharmacyWarehouse").'</td><td class="nowrap">';
-	print $form->selectarray('warehouse', $warehouses, (string) $wh, 1, 0, 0, '', 0, 0, 0, '', 'maxwidth250');
+	print $form->selectarray('warehouse', $warehouses, (string) $wh, -1, 0, 0, '', 0, 0, 0, '', 'maxwidth250');
 	print '</td></tr>';
 	print '<tr><td class="nowrap">'.$langs->trans("PharmacyLedgerDate").'</td><td class="nowrap">';
 	print '<input name="date_count" class="minwidth150" value="'.dol_escape_htmltag($countDate ? $countDate : date('Y-m-d')).'">';

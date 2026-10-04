@@ -199,7 +199,7 @@ if ($action === 'create' && $canRecall) {
 	print '<input type="hidden" name="action" value="create">';
 	print '<table class="noborder centpercent">';
 	print '<tr><td class="nowrap">'.$langs->trans("PharmacyExpiryProduct").'</td><td class="nowrap">';
-	print $form->selectarray('product', $productOptions, (string) GETPOSTINT('product'), 1, 0, 0, '', 0, 0, 0, '', 'maxwidth300');
+	print $form->selectarray('product', $productOptions, (string) GETPOSTINT('product'), -1, 0, 0, '', 0, 0, 0, '', 'maxwidth300');
 	print '</td></tr>';
 	print '<tr><td class="nowrap">'.$langs->trans("PharmacyExpiryBatch").'</td><td class="nowrap">';
 	print '<input name="batch" class="minwidth200" value="'.dol_escape_htmltag(GETPOST('batch', 'alpha')).'">';
@@ -212,7 +212,7 @@ if ($action === 'create' && $canRecall) {
 	print $form->selectarray('level', $levelOptions, (string) (GETPOSTINT('level') ? GETPOSTINT('level') : 1), 0, 0, 0, '', 0, 0, 0, '', 'maxwidth250');
 	print '</td></tr>';
 	print '<tr><td class="nowrap">'.$langs->trans("PharmacyWarehouse").'</td><td class="nowrap">';
-	print $form->selectarray('wh', pharmacy_warehouse_options($db), (string) GETPOSTINT('wh'), 1, 0, 0, '', 0, 0, 0, '', 'maxwidth250');
+	print $form->selectarray('wh', pharmacy_warehouse_options($db), (string) GETPOSTINT('wh'), -1, 0, 0, '', 0, 0, 0, '', 'maxwidth250');
 	print '</td></tr>';
 	print '<tr><td class="nowrap">'.dol_escape_htmltag($langs->trans("Note")).'</td><td class="nowrap">';
 	print '<input name="reason" class="minwidth400" value="'.dol_escape_htmltag(GETPOST('reason', 'restricthtml')).'">';
