@@ -216,6 +216,11 @@ class PharmacyOpsTest extends \PHPUnit\Framework\TestCase
 			$src = file_get_contents(__DIR__.'/../../'.$page);
 			$this->assertStringNotContainsString('load_barre_liste(', $src, $page.': load_barre_liste() does not exist');
 			$this->assertStringContainsString('print_barre_liste(', $src, $page.': uses print_barre_liste()');
+			// These pages already print a title with load_fiche_titre(); passing a
+			// title to print_barre_liste() as well prints it twice, once at the
+			// top and once in the pagination bar at the bottom.
+			$this->assertStringContainsString("print_barre_liste('', \$page", $src, $page.': pagination bar must not repeat the page title');
+			$this->assertStringContainsString('load_fiche_titre(', $src, $page.': the page has its own title block');
 		}
 	}
 
