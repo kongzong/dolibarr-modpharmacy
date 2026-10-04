@@ -322,3 +322,146 @@ function pharmacy_movement_direction($label)
 	}
 	return 0;
 }
+
+/**
+ * Stock position of one product for the prescription screen: how much is on
+ * hand and which batch FEFO would pick first.
+ *
+ * The batch query mirrors Dispense::allocateFefo() on purpose (same ordering,
+ * same exclusions): expired lots and lots under a sales hold (BLOCK) are not
+ * stock the dispenser can use, so showing them would promise something the
+ * pharmacy cannot hand over.
+ *
+ * Read-only: no stock is touched.
+ *
+ * @param	DoliDB		$db				Database handler
+ * @param	int			$fkProduct		Product id
+ * @param	int			$warehouseId	0 = every warehouse
+ * @return	array{reel:float,batch:string,sellby:int,eatby:int,batch_qty:float}|null	null when the product is unknown
+ */
+function pharmacy_stock_available($db, $fkProduct, $warehouseId = 0)
+{
+	$fkProduct = (int) $fkProduct;
+	if ($fkProduct <= 0) {
+		return null;
+	}
+	$P = $db->prefix();
+
+	$sql = "SELECT COALESCE(SUM(ps.reel), 0) AS reel FROM ".$P."product_stock AS ps";
+	$sql .= " WHERE ps.fk_product = ".$fkProduct;
+	if ($warehouseId > 0) {
+		$sql .= " AND ps.fk_entrepot = ".(int) $warehouseId;
+	}
+	$resql = $db->query($sql);
+	$reel = $resql ? (float) $db->fetch_object($resql)->reel : 0.0;
+	if ($resql) {
+		$db->free($resql);
+	}
+
+	$out = array('reel' => $reel, 'batch' => '', 'sellby' => 0, 'eatby' => 0, 'batch_qty' => 0.0);
+	if ($reel <= 0) {
+		return $out;
+	}
+
+	// FEFO: soonest sell-by first, lots without a date last.
+	$sql = "SELECT pb.batch, pb.qty, pl.eatby, pl.sellby FROM ".$P."product_batch AS pb";
+	$sql .= " INNER JOIN ".$P."product_stock AS ps ON ps.rowid = pb.fk_product_stock";
+	$sql .= " LEFT JOIN ".$P."product_lot AS pl ON pl.fk_product = ps.fk_product AND pl.batch = pb.batch";
+	// Same join the dispenser uses, so "first available batch" here is exactly
+	// the batch allocateFefo() would pick (excludes BLOCK / restarted lots).
+	dol_include_once('/pharmacy/class/pharmacybatchaction.class.php');
+	$sql .= PharmacyBatchAction::latestOpJoin('ps.fk_product', 'pb.batch');
+	$sql .= " WHERE ps.fk_product = ".$fkProduct." AND pb.qty > 0";
+	if ($warehouseId > 0) {
+		$sql .= " AND ps.fk_entrepot = ".(int) $warehouseId;
+	}
+	$sql .= " AND (pl.sellby IS NULL OR pl.sellby > '".$db->escape(date('Y-m-d'))."')";
+	$sql .= " AND (pl.eatby IS NULL OR pl.eatby > '".$db->escape(date('Y-m-d'))."')";
+	$sql .= " AND (ea.op IS NULL OR ea.op <> 'BLOCK')";
+	$sql .= " ORDER BY (pl.sellby IS NULL) ASC, pl.sellby ASC, (pl.eatby IS NULL) ASC, pl.eatby ASC, pb.batch ASC";
+	$resql = $db->query($sql);
+	$first = null;
+	if ($resql) {
+		while ($o = $db->fetch_object($resql)) {
+			$first = $o;
+			break;
+		}
+		$db->free($resql);
+	}
+	if ($first) {
+		$out['batch'] = (string) $first->batch;
+		$out['batch_qty'] = (float) $first->qty;
+		$out['sellby'] = $first->sellby ? (int) strtotime((string) $first->sellby) : 0;
+		$out['eatby'] = $first->eatby ? (int) strtotime((string) $first->eatby) : 0;
+	}
+	return $out;
+}
+
+/**
+ * Link a returned dispensing sheet to the money side.
+ *
+ * A return puts the goods back on the shelf, but the patient already paid: the
+ * bill has to be credited back or the books do not balance. This prepares that
+ * credit as a DRAFT through Paybill::createRefundDraft() and leaves the
+ * execution to the cashier, because how much to refund (and whether the shop
+ * refunds at all) is a business decision, not something a stock return may
+ * decide on its own.
+ *
+ * Only sheets whose bill is PAID and already invoiced can be drafted, which is
+ * exactly what createRefundDraft() enforces; the other outcomes are counted in
+ * $info so the page can say something useful.
+ *
+ * @param	DoliDB		$db			Database handler
+ * @param	User		$user			Actor
+ * @param	int			$dispenseId		Returned sheet
+ * @param	string		$dispenseRef	Its ref, for the reason text
+ * @param	array		$info			Out: drafts[], unpaid, exists, failed, noclinicpay
+ * @return	int							Number of drafts created
+ */
+function pharmacy_return_draft_refund($db, $user, $dispenseId, $dispenseRef, &$info = array())
+{
+	$info = array('drafts' => array(), 'unpaid' => 0, 'exists' => 0, 'failed' => 0);
+	if (!isModEnabled('clinicpay')) {
+		$info['noclinicpay'] = 1;
+		return 0;
+	}
+	dol_include_once('/clinicpay/class/paybill.class.php');
+
+	$P = $db->prefix();
+	$sql = "SELECT fk_bill, COALESCE(SUM(subprice_total),0) AS amount FROM ".$P."clinicpay_bill_line";
+	$sql .= " WHERE fk_dispense = ".(int) $dispenseId." GROUP BY fk_bill";
+	$resql = $db->query($sql);
+	$bills = array();
+	if ($resql) {
+		while ($o = $db->fetch_object($resql)) {
+			$bills[] = $o;
+		}
+		$db->free($resql);
+	}
+	if (empty($bills)) {
+		return 0;
+	}
+
+	foreach ($bills as $b) {
+		$bill = new Paybill($db);
+		if ($bill->fetch((int) $b->fk_bill) <= 0) {
+			$info['failed']++;
+			continue;
+		}
+		if ((int) $bill->status !== CLINICPAY_BILL_PAID) {
+			$info['unpaid']++;
+			continue;
+		}
+		if ($bill->findRefundDraft() > 0) {
+			$info['exists']++;
+			continue;
+		}
+		$rc = $bill->createRefundDraft($user, 'Drug return '.$dispenseRef, (float) $b->amount);
+		if ($rc > 0) {
+			$info['drafts'][] = array('id' => (int) $bill->id, 'ref' => $bill->ref, 'amount' => (float) $b->amount);
+		} else {
+			$info['failed']++;
+		}
+	}
+	return count($info['drafts']);
+}

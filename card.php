@@ -183,6 +183,21 @@ if ($action == 'confirm_return' && $id > 0 && $confirm == 'yes') {
 	$result = $dao->returnSheet($user, $reason);
 	if ($result > 0) {
 		setEventMessages($langs->trans("PharmacyAuditReturn").' '.$dao->ref, null, 'mesgs');
+		// The goods are back on the shelf but the patient paid: prepare the
+		// credit back as a draft, the cashier confirms the actual refund.
+		$refundInfo = array();
+		$nbDraft = pharmacy_return_draft_refund($db, $user, (int) $dao->id, $dao->ref, $refundInfo);
+		if ($nbDraft > 0) {
+			$links = array();
+			foreach ($refundInfo['drafts'] as $d) {
+				$links[] = '<a href="'.dol_buildpath('/clinicpay/bill.php', 1).'?id='.(int) $d['id'].'">'.dol_escape_htmltag($d['ref']).'</a>';
+			}
+			setEventMessages($langs->trans("PharmacyReturnRefundDraft", $nbDraft).' '.implode(', ', $links), null, 'mesgs');
+		} elseif (!empty($refundInfo['exists'])) {
+			setEventMessages($langs->trans("PharmacyReturnRefundExists"), null, 'warnings');
+		} elseif (!empty($refundInfo['unpaid'])) {
+			setEventMessages($langs->trans("PharmacyReturnNoRefundUnpaid"), null, 'warnings');
+		}
 	} else {
 		$msg = $dao->error;
 		$translated = $langs->trans($msg);

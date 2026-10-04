@@ -147,7 +147,7 @@ class modPharmacy extends DolibarrModules
 		// and dispatch added 2026-10-03 for the supplier replenishment chain)
 		$this->rights = array();
 		$r = 0;
-		$perms = array(11 => 'read', 21 => 'write', 31 => 'dispense', 41 => 'return', 51 => 'admin', 61 => 'dispose', 71 => 'purchase', 81 => 'dispatch');
+		$perms = array(11 => 'read', 21 => 'write', 31 => 'dispense', 41 => 'return', 51 => 'admin', 61 => 'dispose', 71 => 'purchase', 81 => 'dispatch', 91 => 'stock_count');
 		foreach ($perms as $suffix => $code) {
 			$this->rights[$r][0] = $this->numero . $suffix;
 			$this->rights[$r][1] = 'PharmacyPerm'.ucfirst($code);
@@ -313,9 +313,37 @@ class modPharmacy extends DolibarrModules
 			'user' => 2,
 		);
 		$this->menu[$r++] = array(
-			'fk_menu' => 'fk_mainmenu=clinic,fk_leftmenu=clinic_report',
+			'fk_menu' => 'fk_mainmenu=clinic,fk_leftmenu=clinic_pharmacy',
 			'type' => 'left',
-			'titre' => 'PharmacyReport',
+			'titre' => 'PharmacyStockCountList',
+			'mainmenu' => 'clinic',
+			'leftmenu' => 'pharmacy_stock_count',
+			'prefix' => img_picto('', 'fa-clipboard-check_fas_#1e88e5', 'class="paddingright pictofixedwidth"'),
+			'url' => '/pharmacy/stock_count.php',
+			'langs' => 'pharmacy@pharmacy',
+			'position' => 1311,
+			'enabled' => 'isModEnabled("pharmacy")',
+			'perms' => '$user->hasRight("pharmacy", "read")',
+			'target' => '',
+			'user' => 2,
+		);
+		$this->menu[$r++] = array(
+			'fk_menu' => 'fk_mainmenu=clinic,fk_leftmenu=clinic_pharmacy',
+			'type' => 'left',
+			'titre' => 'PharmacyRecallList',
+			'mainmenu' => 'clinic',
+			'leftmenu' => 'pharmacy_recall',
+			'prefix' => img_picto('', 'fa-bullhorn_fas_#c62828', 'class="paddingright pictofixedwidth"'),
+			'url' => '/pharmacy/recall.php',
+			'langs' => 'pharmacy@pharmacy',
+			'position' => 1320,
+			'enabled' => 'isModEnabled("pharmacy")',
+			'perms' => '$user->hasRight("pharmacy", "read")',
+			'target' => '',
+			'user' => 2,
+		);
+		$this->menu[$r++] = array(
+			'fk_menu' => 'fk_mainmenu=clinic,fk_leftmenu=clinic_report',
 			'mainmenu' => 'clinic',
 			'leftmenu' => 'pharmacy_report',
 			'prefix' => img_picto('', 'fa-chart-line_fas_#00897b', 'class="paddingright pictofixedwidth"'),
