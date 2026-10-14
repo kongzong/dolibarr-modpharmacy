@@ -349,6 +349,7 @@ if ($billedBillId > 0) {
 }
 if ((int) $dao->status !== PHARMACY_STATUS_PENDING) {
 	print dolGetButtonAction($langs->trans("PharmacyPdf"), '', 'default', dol_buildpath('/pharmacy/pdf.php', 1).'?id='.$dao->id, '', 1, array('attr' => array('target' => '_blank')));
+	print dolGetButtonAction($langs->trans("PharmacyLabelPrint"), '', 'default', dol_buildpath('/pharmacy/label.php', 1).'?id='.$dao->id, '', 1, array('attr' => array('target' => '_blank')));
 }
 print '</div>';
 

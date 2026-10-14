@@ -636,6 +636,17 @@ class Dispense extends CommonObject
 	}
 
 	/**
+	 * Public wrapper for preparePdfContext(): fills patient_name/card_no/
+	 * dispenser_name for non-PDF consumers such as label.php.
+	 *
+	 * @return	void
+	 */
+	public function preparePdfContextPublic()
+	{
+		$this->preparePdfContext();
+	}
+
+	/**
 	 * Build the dispense-sheet PDF (model 'fy') through the core generator
 	 * lookup (module_parts['models'] = 1, mirroring modPrescription).
 	 *
