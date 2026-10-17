@@ -374,3 +374,17 @@ PharmacyRecallErrNotNotified=还有患者未通知，不能关闭召回
 PharmacyReturnRefundDraft=已生成 %s 张收费单红冲草稿，请到收费单确认执行后才会真正退款：
 PharmacyReturnRefundExists=该单已有红冲草稿，无需重复生成
 PharmacyReturnNoRefundUnpaid=关联收费单未收款或未开票，无需红冲
+
+PharmacySuggest=采购建议
+PharmacySuggestStock=现有库存
+PharmacySuggestSeuil=安全线
+PharmacySuggestOut30=30天消耗
+PharmacySuggestInTransit=在途
+PharmacySuggestTarget=目标水位
+PharmacySuggestQty=建议采购量
+PharmacySuggestGenerate=生成采购单
+PharmacySuggestNoSupplier=请选择供应商
+PharmacySuggestNoRow=请先勾选并填写有效的采购数量
+PharmacySuggestNone=当前没有需要补货的药品（可给药品设置安全线/目标库存后重试）
+PharmacySuggestGenerated=已生成采购单 %s，正在跳转收货页
+PharmacySuggestHint=目标水位 = 安全线 + 30天消耗（若设置了目标库存则直接采用）；在途 = 未完成采购单 − 已收货量（含部分收货）；建议量 = 目标 − 现有 − 在途
