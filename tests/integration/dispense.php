@@ -225,6 +225,10 @@ try {
 	$createdTables[] = MAIN_DB_PREFIX.'product_lot';
 	pxTestQuery($db, 'CREATE TABLE '.MAIN_DB_PREFIX.'product_batch (rowid INTEGER AUTO_INCREMENT PRIMARY KEY, fk_product_stock INTEGER NOT NULL, batch VARCHAR(128) NOT NULL, qty DOUBLE DEFAULT 0) ENGINE=InnoDB');
 	$createdTables[] = MAIN_DB_PREFIX.'product_batch';
+	// Append-only expiry disposition log: allocateFefo() joins the latest op to
+	// skip BLOCKed batches, so the fixture must expose it.
+	pxTestQuery($db, 'CREATE TABLE '.MAIN_DB_PREFIX.'pharmacy_expiry_action (rowid INTEGER AUTO_INCREMENT PRIMARY KEY, entity INTEGER DEFAULT 1 NOT NULL, fk_product INTEGER NOT NULL, batch VARCHAR(128) NOT NULL, fk_entrepot INTEGER DEFAULT 0 NOT NULL, op VARCHAR(10) NOT NULL, qty DOUBLE DEFAULT 0 NOT NULL, note TEXT, fk_user_creat INTEGER DEFAULT NULL, date_creation DATETIME) ENGINE=InnoDB');
+	$createdTables[] = MAIN_DB_PREFIX.'pharmacy_expiry_action';
 	pxTestQuery($db, 'CREATE TABLE '.MAIN_DB_PREFIX.'stock_mouvement (rowid INTEGER AUTO_INCREMENT PRIMARY KEY, fk_product INTEGER NOT NULL, fk_entrepot INTEGER NOT NULL, value DOUBLE NOT NULL, type_mouvement SMALLINT NOT NULL, fk_user_author INTEGER DEFAULT NULL, label VARCHAR(255), batch VARCHAR(128) DEFAULT NULL, inventorycode VARCHAR(128) DEFAULT NULL, price DOUBLE DEFAULT 0, eatby DATETIME DEFAULT NULL, sellby DATETIME DEFAULT NULL, fk_origin INTEGER DEFAULT NULL, origintype VARCHAR(32) DEFAULT NULL, fk_projet INTEGER DEFAULT NULL, datem DATETIME) ENGINE=InnoDB');
 	$createdTables[] = MAIN_DB_PREFIX.'stock_mouvement';
 	pxTestQuery($db, 'CREATE TABLE '.MAIN_DB_PREFIX.'user (rowid INTEGER AUTO_INCREMENT PRIMARY KEY, login VARCHAR(64)) ENGINE=InnoDB');
@@ -248,20 +252,29 @@ try {
 	pxTestQuery($db, 'INSERT INTO '.MAIN_DB_PREFIX.'societe (rowid, entity, nom) VALUES (1, 1, "患者一")');
 
 	// Product 1 with three batches: B-old sells first (FEFO), B-mid, B-new
-	pxTestQuery($db, 'INSERT INTO '.MAIN_DB_PREFIX.'product (rowid, entity, ref, label, stockable_product, type) VALUES (1, 1, "MED-001", "阿莫西林胶囊", 1, 0)');
+	pxTestQuery($db, 'INSERT INTO '.MAIN_DB_PREFIX.'product (rowid, entity, ref, label, stockable_product, type, fk_product_type, tobatch) VALUES (1, 1, "MED-001", "阿莫西林胶囊", 1, 0, 0, 1)');
+	// Product 2 is a SERVICE (consultation / treatment fee): fk_product_type = 1,
+	// no batch, no stock row. It must be snapshotted with is_stock = 0, otherwise
+	// confirm() raises PharmacyErrNoBatch and the sheet stays pending forever
+	// (regression 2026-10-18, service items blocked 诊疗 dispensing).
+	pxTestQuery($db, 'INSERT INTO '.MAIN_DB_PREFIX.'product (rowid, entity, ref, label, fk_product_type, tobatch) VALUES (2, 1, "SRV-001", "针灸治疗（次）", 1, 0)');
 	pxTestQuery($db, 'INSERT INTO '.MAIN_DB_PREFIX.'product_stock (rowid, fk_product, fk_entrepot, reel) VALUES (1, 1, 1, 100)');
+	// Dates are relative to today on purpose: FEFO must be asserted on ordering,
+	// and a hard-coded date silently becomes "expired" (and therefore excluded)
+	// once the calendar passes it.
+	$today = new DateTimeImmutable('today');
 	foreach (array(
-		array('B-OLD', '2026-10-01', 30),
-		array('B-MID', '2027-01-15', 40),
-		array('B-NEW', '2027-06-01', 30),
+		array('B-OLD', $today->modify('+30 days')->format('Y-m-d'), 30),
+		array('B-MID', $today->modify('+120 days')->format('Y-m-d'), 40),
+		array('B-NEW', $today->modify('+240 days')->format('Y-m-d'), 30),
 	) as $b) {
 		pxTestQuery($db, 'INSERT INTO '.MAIN_DB_PREFIX.'product_lot (entity, fk_product, batch, eatby, sellby) VALUES (1, 1, "'.$b[0].'", "'.$b[1].'", "'.$b[1].'")');
 		pxTestQuery($db, 'INSERT INTO '.MAIN_DB_PREFIX.'product_batch (fk_product_stock, batch, qty) VALUES (1, "'.$b[0].'", '.$b[2].')');
 	}
 
-	// Signed prescription with two stock lines + one free-text line
+	// Signed prescription with two stock lines + one service line
 	pxTestQuery($db, 'INSERT INTO '.MAIN_DB_PREFIX.'prescription (entity, ref, presc_type, fk_patient, fk_doctor, date_presc, status, date_creation, tms) VALUES (1, "CF-T-001", "WM", 1, 1, NOW(), 1, NOW(), NOW())');
-	pxTestQuery($db, 'INSERT INTO '.MAIN_DB_PREFIX.'prescription_line (fk_prescription, position, fk_product, product_ref, label, qty, qty_unit) VALUES (1, 0, 1, "MED-001", "阿莫西林胶囊", 50, "粒"), (1, 1, 1, "MED-001", "阿莫西林胶囊(第二行)", 20, "粒")');
+	pxTestQuery($db, 'INSERT INTO '.MAIN_DB_PREFIX.'prescription_line (fk_prescription, position, fk_product, product_ref, label, qty, qty_unit) VALUES (1, 0, 1, "MED-001", "阿莫西林胶囊", 50, "粒"), (1, 1, 1, "MED-001", "阿莫西林胶囊(第二行)", 20, "粒"), (1, 2, 2, "SRV-001", "针灸治疗（次）", 1, "次")');
 	$presc = new PrescriptionSheet($db);
 	$presc->fetch(1);
 	$dao = new Dispense($db);
@@ -280,11 +293,12 @@ try {
 		$second = new Dispense($db);
 		check($second->createFromPrescription($user, $presc, 1) === -2, 'second live sheet accepted');
 		check($second->error === 'PharmacyErrAlreadyPending', 'wrong gate error: '.$second->error);
-		// lines snapshot: 2 lines, stock flags correct
-		check(count($dao->lines) === 2, 'line count');
+		// lines snapshot: 3 lines, stock flags correct (service line excluded)
+		check(count($dao->lines) === 3, 'line count');
 		check($dao->lines[0]['is_stock'] === 1 && $dao->lines[1]['is_stock'] === 1, 'stock flags');
+		check($dao->lines[2]['is_stock'] === 0, 'service line must not move stock');
 		$dao->fetch($dao->id);
-		check(count($dao->lines) === 2, 'lines lost after refetch');
+		check(count($dao->lines) === 3, 'lines lost after refetch');
 	});
 
 	testCase('confirm: FEFO allocation across batches, idempotent on repeat', function () use ($db, $dao, $user) {
@@ -298,6 +312,8 @@ try {
 		// stock table updated by core MouvementStock: 100 - 50 - 20 = 30
 		$reelVal = (float) pxTestScalar($db, 'SELECT reel FROM '.MAIN_DB_PREFIX.'product_stock WHERE rowid = 1');
 		check($reelVal === 30.0, 'stock not deducted to 30 (got '.$reelVal.')');
+		// the service line must not have been routed to FEFO / stock movement
+		check(empty($dao->lines[2]['batch_note']), 'service line got a batch note: '.$dao->lines[2]['batch_note']);
 		// idempotent repeat
 		$again = new Dispense($db);
 		$again->fetch($dao->id);

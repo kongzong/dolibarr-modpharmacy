@@ -357,8 +357,23 @@ class Dispense extends CommonObject
 			$this->id = (int) $this->db->db->insert_id;
 
 			$position = 0;
+			$serviceCache = array();
 			foreach ($presc->lines as $l) {
-				$isStock = !empty($l['fk_product']) ? 1 : 0;
+				// Only real products move stock. Services (fk_product_type = 1:
+				// consultation / treatment fee / prepaid card) have no batch and
+				// no reel; flagging them as stock makes confirm() raise
+				// PharmacyErrNoBatch and leaves the sheet stuck in PENDING.
+				$pid = !empty($l['fk_product']) ? (int) $l['fk_product'] : 0;
+				if ($pid > 0 && !isset($serviceCache[$pid])) {
+					$resT = $this->db->query("SELECT fk_product_type FROM ".$this->db->prefix()."product WHERE rowid = ".$pid);
+					if (!$resT) {
+						throw new RuntimeException($this->db->lasterror());
+					}
+					$objT = $this->db->fetch_object($resT);
+					$this->db->free($resT);
+					$serviceCache[$pid] = (!$objT || (int) $objT->fk_product_type === 1) ? 1 : 0;
+				}
+				$isStock = ($pid > 0 && empty($serviceCache[$pid])) ? 1 : 0;
 				$lineQty = ($l['qty'] !== null) ? (float) $l['qty'] * $dosesMult : null;
 				$sql = "INSERT INTO ".$this->db->prefix()."pharmacy_dispense_line (fk_dispense, fk_prescription_line, position, fk_product, product_ref, label, qty, qty_unit, is_stock)";
 				$sql .= " VALUES (".$this->id.", 0, ".$position.", ".(!empty($l['fk_product']) ? (int) $l['fk_product'] : 'NULL');
@@ -401,7 +416,7 @@ class Dispense extends CommonObject
 				'label' => $l['label'],
 				'qty' => $l['qty'] !== null ? (float) $l['qty'] * $dosesMult : null,
 				'qty_unit' => $l['qty_unit'],
-				'is_stock' => !empty($l['fk_product']) ? 1 : 0,
+				'is_stock' => (!empty($l['fk_product']) && empty($serviceCache[(int) $l['fk_product']])) ? 1 : 0,
 				'batch_note' => null,
 			);
 		}
@@ -531,6 +546,20 @@ class Dispense extends CommonObject
 			$stockReservations = array();
 			foreach ($this->lines as $lineKey => $l) {
 				if (!$l['is_stock'] || empty($l['fk_product'])) {
+					continue;
+				}
+				// Defensive: sheets created before the service check may flag a
+				// service line as stock. Services have nothing to move, so clear
+				// the flag instead of failing the whole sheet forever.
+				$resType = $this->db->query("SELECT fk_product_type FROM ".$this->db->prefix()."product WHERE rowid = ".((int) $l['fk_product']));
+				if (!$resType) {
+					throw new RuntimeException($this->db->lasterror());
+				}
+				$objType = $this->db->fetch_object($resType);
+				$this->db->free($resType);
+				if ($objType && (int) $objType->fk_product_type === 1) {
+					$this->db->query("UPDATE ".$this->db->prefix()."pharmacy_dispense_line SET is_stock = 0 WHERE fk_dispense = ".((int) $this->id)." AND position = ".((int) $lineKey));
+					$this->lines[$lineKey]['is_stock'] = 0;
 					continue;
 				}
 				// 药品出库强制批次（设计共识 2026-09-24）：未启用批次管理的产品显式拦截，
