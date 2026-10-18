@@ -67,7 +67,7 @@ dol_include_once('/pharmacy/lib/pharmacy.lib.php');
  * @var User $user
  */
 
-$langs->loadLangs(array("products", "stocks", "pharmacy@pharmacy"));
+$langs->loadLangs(array("products", "stocks", "companies", "pharmacy@pharmacy", "patient@patient"));
 
 if (!$user->hasRight('pharmacy', 'read')) {
 	accessforbidden();
@@ -167,7 +167,7 @@ $db->free($resql);
 
 // ---- CSV (must run before any output) ----------------------------------------
 if ($action === 'export') {
-	$csvName = 'pharmacy_report_outflow'.dol_now('%Y%m%d%H%M%S');
+	$csvName = 'pharmacy_report_outflow'.dol_print_date(dol_now(), '%Y%m%d%H%M%S');
 	// Module temp dir: always inside the open_basedir whitelist (d:/dolibarr/...).
 	$csvDir = empty($conf->pharmacy->dir_temp) ? DOL_DOCUMENT_ROOT.'/dolibarr_documents/temp/' : $conf->pharmacy->dir_temp;
 	$csvFile = $csvDir.'/'.$csvName.'.csv';
@@ -207,6 +207,52 @@ if ($action === 'export') {
 			'',
 			'',
 		));
+		fclose($fh);
+		top_httphead('text/csv; charset=UTF-8');
+		header('Content-Description: File Transfer');
+		header('Content-Disposition: attachment; filename="'.$csvName.'.csv"');
+		header('Cache-Control: Public, must-revalidate');
+		header('Pragma: public');
+		readfile($csvFile);
+		exit;
+	}
+	setEventMessages($langs->trans('PharmacyReportExportFailed'), null, 'errors');
+}
+
+// ---- CSV: flat dispensing-line detail ----------------------------------------
+if ($action === 'exportdetail') {
+	$csvName = 'pharmacy_report_outflow_detail_'.dol_print_date(dol_now(), '%Y%m%d%H%M%S');
+	$csvDir = empty($conf->pharmacy->dir_temp) ? DOL_DOCUMENT_ROOT.'/dolibarr_documents/temp/' : $conf->pharmacy->dir_temp;
+	$csvFile = $csvDir.'/'.$csvName.'.csv';
+	$fh = fopen($csvFile, 'w');
+	if ($fh) {
+		fwrite($fh, "\xEF\xBB\xBF");
+		fputcsv($fh, array(
+			$langs->trans('PharmacyRef'),
+			$langs->trans('Date'),
+			$langs->trans('PatientCardNo'),
+			$langs->trans('ThirdPartyName'),
+			$langs->trans('PharmacyReportColProductRef'),
+			$langs->trans('Product'),
+			$langs->trans('Qty'),
+			$langs->trans('PharmacyReportColUnit'),
+			$langs->trans('PharmacyReportColBatchNote'),
+			$langs->trans('Status'),
+		));
+		foreach ($details as $r) {
+			fputcsv($fh, array(
+				(string) $r->ref,
+				$r->date_dispense ? dol_print_date($db->jdate($r->date_dispense), 'dayhour') : '',
+				(string) $r->card_no,
+				(string) $r->patient_name,
+				(string) $r->product_ref,
+				(string) $r->llabel,
+				number_format((float) $r->qty, 3, '.', ''),
+				(string) $r->qty_unit,
+				(string) $r->batch_note,
+				pharmacy_status_label((int) $r->status),
+			));
+		}
 		fclose($fh);
 		top_httphead('text/csv; charset=UTF-8');
 		header('Content-Description: File Transfer');
@@ -272,6 +318,7 @@ print '<td colspan="2"></td>';
 print '<td colspan="2" class="center">';
 print '<button type="submit" class="button" name="submitfilter" value="1">'.$langs->trans("Refresh").'</button>';
 print ' <button type="submit" class="button" name="action" value="export">'.$langs->trans("PharmacyReportExport").'</button>';
+print ' <button type="submit" class="button" name="action" value="exportdetail">'.$langs->trans("PharmacyReportExportDetail").'</button>';
 print ' <button type="submit" class="button" name="button_removefilter" value="1">'.$langs->trans("ClearFilter").'</button>';
 print '</td></tr>';
 print '</table>';

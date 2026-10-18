@@ -379,3 +379,5 @@ PharmacySuggestNoRow=Check at least one row with a positive quantity first
 PharmacySuggestNone=Nothing to replenish right now (set safety thresholds / target stock on products to enable suggestions)
 PharmacySuggestGenerated=Supplier order %s generated, redirecting to the receive screen
 PharmacySuggestHint=Target = safety threshold + 30-day usage (or target stock when set); in transit = open supplier orders - received (partial receipts included); suggested = target - stock - in transit
+
+PharmacyReportExportDetail=Export details

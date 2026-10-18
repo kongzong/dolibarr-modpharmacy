@@ -49,7 +49,7 @@ dol_include_once('/pharmacy/class/dispense.class.php');
  * @var User $user
  */
 
-$langs->loadLangs(array("patient@patient", "pharmacy@pharmacy"));
+$langs->loadLangs(array("companies", "patient@patient", "pharmacy@pharmacy"));
 
 if (!$user->hasRight('pharmacy', 'read')) {
 	accessforbidden();
@@ -92,6 +92,52 @@ if ($result === null) {
 }
 $total = $result['total'];
 $rows = $result['rows'];
+
+// ---- CSV export of the full filtered list (must run before any output) --------
+$action = GETPOST('action', 'aZ09');
+if ($action === 'export') {
+	$all = $dao->search(array('q' => $search, 'status' => $status, 'from' => $dateFrom, 'to' => $dateTo, 'fk_patient' => $searchFkPatient, 'fk_product' => $searchFkProduct, 'date_field' => $dateField), 0, 0);
+	if ($all === null) {
+		dol_print_error($db, $dao->error);
+		exit;
+	}
+	$csvName = 'pharmacy_dispenses_'.dol_print_date(dol_now(), '%Y%m%d%H%M%S');
+	$csvDir = empty($conf->pharmacy->dir_temp) ? DOL_DOCUMENT_ROOT.'/dolibarr_documents/temp/' : $conf->pharmacy->dir_temp;
+	$csvFile = $csvDir.'/'.$csvName.'.csv';
+	$fh = fopen($csvFile, 'w');
+	if ($fh) {
+		fwrite($fh, "\xEF\xBB\xBF");
+		fputcsv($fh, array(
+			$langs->trans('PharmacyRef'),
+			$langs->trans('PharmacyPrescription'),
+			$langs->trans('PatientCardNo'),
+			$langs->trans('ThirdPartyName'),
+			$langs->trans('PharmacyWarehouse'),
+			$langs->trans('Date'),
+			$langs->trans('Status'),
+		));
+		foreach ($all['rows'] as $r) {
+			fputcsv($fh, array(
+				(string) $r->ref,
+				(string) $r->presc_ref,
+				(string) $r->card_no,
+				(string) $r->patient_name,
+				(string) $r->warehouse_label,
+				$r->date_creation ? dol_print_date($db->jdate($r->date_creation), 'dayhour') : '',
+				pharmacy_status_label((int) $r->status),
+			));
+		}
+		fclose($fh);
+		top_httphead('text/csv; charset=UTF-8');
+		header('Content-Description: File Transfer');
+		header('Content-Disposition: attachment; filename="'.$csvName.'.csv"');
+		header('Cache-Control: Public, must-revalidate');
+		header('Pragma: public');
+		readfile($csvFile);
+		exit;
+	}
+	setEventMessages($langs->trans('PharmacyReportExportFailed'), null, 'errors');
+}
 
 llxHeader('', $langs->trans("PharmacyDispenseList"));
 
@@ -164,6 +210,7 @@ print '<td class="liste_titre center">'.$form->selectarray('search_status', $sta
 print '<td class="liste_titre center maxwidthsearch">';
 print '<button type="submit" class="liste_titre button_search reposition" name="button_search" value="x"><span class="fa fa-search"></span></button>';
 print '<button type="submit" class="liste_titre button_removefilter reposition" name="button_removefilter" value="x"><span class="fa fa-remove"></span></button>';
+print '<button type="submit" class="liste_titre button_export reposition" name="action" value="export" title="'.dol_escape_htmltag($langs->trans('PharmacyReportExport')).'"><span class="fa fa-file-export"></span></button>';
 print '</td></tr>';
 
 print '<tr class="liste_titre">';
