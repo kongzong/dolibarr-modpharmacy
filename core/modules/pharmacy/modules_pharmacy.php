@@ -243,7 +243,7 @@ abstract class ModelePDFPharmacy extends CommonDocGenerator
 		if (!empty($object->date_dispense)) {
 			$right = $outputlangs->transnoentities('PharmacyDateDispense').': '.dol_print_date($object->date_dispense, 'day', false, $outputlangs, true);
 			if (!empty($object->fk_user_dispense)) {
-				$right .= '    '.(isset($object->dispenser_name) ? $object->dispenser_name : '').' : ';
+				$right .= '    '.$outputlangs->transnoentities('PharmacySignDispenser').': '.(isset($object->dispenser_name) ? $object->dispenser_name : '');
 			}
 		}
 		$this->text($pdf, $x + $half, $y, $half, $right, 'R');

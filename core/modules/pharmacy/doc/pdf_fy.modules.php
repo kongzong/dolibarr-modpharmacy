@@ -151,6 +151,11 @@ class pdf_fy extends ModelePDFPharmacy
 				$batch = implode(', ', $batches);
 				$expiry = implode(', ', $expiries);
 			}
+			// A lot can carry an expiry without a batch number (batch left blank at
+			// dispensing time): print a dash so the column never looks truncated.
+			if ($isStock && $batch === '') {
+				$batch = '—';
+			}
 			$texts = array(
 				'no'     => (string) ($i + 1),
 				'drug'   => (string) $l['label'],
