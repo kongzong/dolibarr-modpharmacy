@@ -169,7 +169,7 @@ $db->free($resql);
 
 // ---- CSV (must run before any output) ----------------------------------------
 if ($action === 'export') {
-	$csvName = 'pharmacy_expiry_action_'.dol_now('%Y%m%d%H%M%S');
+	$csvName = 'pharmacy_expiry_action_'.dol_print_date(dol_now(), '%Y%m%d%H%M%S');
 	$csvDir = empty($conf->pharmacy->dir_temp) ? DOL_DOCUMENT_ROOT.'/dolibarr_documents/temp/' : $conf->pharmacy->dir_temp;
 	$csvFile = $csvDir.'/'.$csvName.'.csv';
 	$fh = fopen($csvFile, 'w');

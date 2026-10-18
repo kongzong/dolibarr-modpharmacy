@@ -170,7 +170,7 @@ foreach ($batchPerRow as $rid => $bq) {
 
 // ---- CSV (must run before any output) ------------------------------------------
 if ($action === 'export') {
-	$csvName = 'pharmacy_report_stock'.dol_now('%Y%m%d%H%M%S');
+	$csvName = 'pharmacy_report_stock'.dol_print_date(dol_now(), '%Y%m%d%H%M%S');
 	// Module temp dir: always inside the open_basedir whitelist (d:/dolibarr/...).
 	$csvDir = empty($conf->pharmacy->dir_temp) ? DOL_DOCUMENT_ROOT.'/dolibarr_documents/temp/' : $conf->pharmacy->dir_temp;
 	$csvFile = $csvDir.'/'.$csvName.'.csv';

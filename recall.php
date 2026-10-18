@@ -143,7 +143,7 @@ if ($id > 0 && $action === 'notify' && $canRecall) {
 	exit;
 }
 
-if ($id > 0 && $action === 'close' && $canRecall) {
+if ($id > 0 && $action === 'close' && $canRecall && GETPOST('token', 'alpha') === newToken()) {
 	$rc = $dao->close($user);
 	if ($rc === -3) {
 		setEventMessages($langs->trans("PharmacyRecallErrNotNotified"), null, 'errors');
@@ -312,7 +312,7 @@ if ($id > 0) {
 		print '<button type="submit" class="button" name="action" value="notify">'.$langs->trans("PharmacyRecallSaveNotify").'</button> ';
 	}
 	if ($canRecall && $dao->status === PharmacyRecall::STATUS_NOTIFIED) {
-		print '<a class="butAction" href="'.dol_buildpath('/pharmacy/recall.php', 1).'?id='.$dao->id.'&action=close"><span class="fa fa-check fa-fw valignmiddle"></span>'.$langs->trans("PharmacyRecallClose").'</a>';
+		print '<a class="butAction" href="'.dol_buildpath('/pharmacy/recall.php', 1).'?id='.$dao->id.'&action=close&token='.newToken().'"><span class="fa fa-check fa-fw valignmiddle"></span>'.$langs->trans("PharmacyRecallClose").'</a>';
 	}
 	print '</div>';
 	print '</form>';
