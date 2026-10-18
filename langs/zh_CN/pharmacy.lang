@@ -390,3 +390,5 @@ PharmacySuggestGenerated=已生成采购单 %s，正在跳转收货页
 PharmacySuggestHint=目标水位 = 安全线 + 30天消耗（若设置了目标库存则直接采用）；在途 = 未完成采购单 − 已收货量（含部分收货）；建议量 = 目标 − 现有 − 在途
 
 PharmacyReportExportDetail=导出明细
+
+PharmacyReportColSheets=出库单数

@@ -110,6 +110,9 @@ function pharmacyReportWhere($dateFrom, $dateTo, $searchFkProduct)
 	if ($searchFkProduct > 0) {
 		$sql .= " AND dl.fk_product = ".((int) $searchFkProduct);
 	}
+	// Outflow means what actually left the shelf: pending sheets (status 0) have
+	// not been dispensed yet and returned sheets (status 2) were reversed.
+	$sql .= " AND d.status = 1";
 	return $sql;
 }
 
@@ -141,6 +144,15 @@ while ($o = $db->fetch_object($resql)) {
 	$totals['total_amount'] += (float) $o->total_amount;
 }
 $db->free($resql);
+
+// Column "times" is per-product distinct sheets; summing it across products overstates.
+// Count sheets globally for the headline figure.
+$sqlSheets = "SELECT COUNT(DISTINCT d.rowid) AS n"
+	." FROM ".MAIN_DB_PREFIX."pharmacy_dispense AS d"
+	." INNER JOIN ".MAIN_DB_PREFIX."pharmacy_dispense_line AS dl ON dl.fk_dispense = d.rowid"
+	.pharmacyReportWhere($dateFrom, $dateTo, $searchFkProduct);
+$rSheets = $db->query($sqlSheets);
+$nbSheets = $rSheets ? (int) $db->fetch_object($rSheets)->n : 0;
 
 // ---- Detail: one row per dispensing line, batch note included -------------------
 $sql = "SELECT d.rowid, d.ref, d.date_dispense, d.status";
@@ -328,7 +340,7 @@ print '</form>';
 
 // ---- Stat pills ---------------------------------------------------------------
 print '<div class="fichecenter marginbottomonly">';
-print '<span class="badge badge-status4">'.$langs->trans("PharmacyReportColTimes").' '.$totals['nb_dispense'].'</span> ';
+print '<span class="badge badge-status4">'.$langs->trans("PharmacyReportColSheets").' '.$nbSheets.'</span> ';
 print '<span class="badge badge-status0">'.$langs->trans("PharmacyReportColQty").' '.number_format($totals['total_qty'], 3).'</span> ';
 print '<span class="badge badge-status1">'.$langs->trans("PharmacyReportColAmount").' '.price($totals['total_amount']).'</span> ';
 print '<span class="badge badge-status4">'.$langs->trans("PharmacyReportDetail").' '.$nbDetail.'</span>';
@@ -374,7 +386,7 @@ foreach ($rows as $r) {
 }
 print '<tr class="liste_titre">';
 print '<th>'.$langs->trans("PharmacyReportTotal").'</th>';
-print '<th class="right">'.$totals['nb_dispense'].'</th>';
+print '<th class="right">'.$nbSheets.'</th>';
 print '<th class="right">'.number_format($totals['total_qty'], 3).'</th>';
 print '<th></th>';
 print '<th class="right">'.price($totals['total_amount']).'</th>';

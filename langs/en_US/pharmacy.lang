@@ -381,3 +381,5 @@ PharmacySuggestGenerated=Supplier order %s generated, redirecting to the receive
 PharmacySuggestHint=Target = safety threshold + 30-day usage (or target stock when set); in transit = open supplier orders - received (partial receipts included); suggested = target - stock - in transit
 
 PharmacyReportExportDetail=Export details
+
+PharmacyReportColSheets=Dispensing sheets
