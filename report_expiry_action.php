@@ -205,6 +205,7 @@ if ($action === 'export') {
 		header('Cache-Control: Public, must-revalidate');
 		header('Pragma: public');
 		readfile($csvFile);
+		@unlink($csvFile);
 		exit;
 	}
 	setEventMessages($langs->trans("PharmacyReportExportFailed"), null, 'errors');
