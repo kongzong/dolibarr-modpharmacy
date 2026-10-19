@@ -41,7 +41,6 @@ dol_include_once('/patient/lib/patient.lib.php');
 /**
  * API class for Pharmacy module
  *
- * @url     GET /dispenses
  * @access  protected
  * @class   DolibarrApiAccess {@requires user,external}
  */
@@ -66,7 +65,7 @@ class Pharmacy extends DolibarrApi
 	/**
 	 * List dispensing sheets.
 	 *
-	 * @url	GET dispenses
+	 * @url	GET /
 	 *
 	 * @param	string	$q				Ref / prescription ref / card no. / patient name
 	 * @param	int		$patient		Patient profile rowid
@@ -109,7 +108,7 @@ class Pharmacy extends DolibarrApi
 	/**
 	 * Get one dispensing sheet with its lines (audited as PHARMACY_READ).
 	 *
-	 * @url	GET dispenses/{id}
+	 * @url	GET {id}
 	 *
 	 * @param	int		$id		Dispense rowid
 	 * @return	array
@@ -132,7 +131,7 @@ class Pharmacy extends DolibarrApi
 	 *
 	 * Body: { "prescription": 10, "warehouse": 1, "note": "..." }
 	 *
-	 * @url	POST dispenses
+	 * @url	POST /
 	 *
 	 * @param	array	$request_data	Body
 	 * @return	array
@@ -182,7 +181,7 @@ class Pharmacy extends DolibarrApi
 	 * Confirm dispensing: FEFO stock deduction + PDF generation (spec §3.3 step 2).
 	 * Idempotent: an already-dispensed sheet returns its current state.
 	 *
-	 * @url	POST dispenses/{id}/confirm
+	 * @url	POST {id}/confirm
 	 *
 	 * @param	int		$id		Dispense rowid
 	 * @return	array
@@ -215,7 +214,7 @@ class Pharmacy extends DolibarrApi
 	 * Return a dispensed sheet: reverse stock movement + prescription bridge
 	 * back to issued (spec §3.3 step 3). Body: { "reason": "..." } (required).
 	 *
-	 * @url	POST dispenses/{id}/return
+	 * @url	POST {id}/return
 	 *
 	 * @param	int		$id				Dispense rowid
 	 * @param	array	$request_data	Body
