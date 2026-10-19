@@ -47,7 +47,9 @@ if (!$user->hasRight('pharmacy', 'dispatch')) {
  * silently records a batch without touching the stock.
  */
 if (!getDolGlobalString('STOCK_CALCULATE_ON_SUPPLIER_DISPATCH_ORDER')) {
-	dol_const('STOCK_CALCULATE_ON_SUPPLIER_DISPATCH_ORDER', '1');
+	// dol_const() does not exist in Dolibarr 22 -- use the real setter,
+	// otherwise turning this option off in Setup would fatal the page.
+	dolibarr_set_const($db, 'STOCK_CALCULATE_ON_SUPPLIER_DISPATCH_ORDER', '1', 'chaine', 0, 'Enabled by pharmacy/dispatch.php', 0);
 	$conf->global->STOCK_CALCULATE_ON_SUPPLIER_DISPATCH_ORDER = 1;
 }
 
@@ -141,26 +143,29 @@ if ($action === 'dispatch' && $token !== '') {
 					setEventMessages($langs->trans('PharmacyDispatchErr', $line->ref, $order->error), $order->errors, 'errors');
 				}
 			}
+		}
 
-			// dispatchProduct() only writes reception lines and moves stock; the
-			// order status is advanced by Livraison() (needs the "receptionner"
-			// right, or reception.creer when the reception module is on).
-			if ($receivedSomething) {
-				$order->fetch_lines();
-				$pending = 0;
-				foreach ($order->lines as $line) {
-					$got = pharmacy_received_qty($db, (int) $order->id, (int) $line->id);
-					if ($got + 0.0001 < (float) $line->qty) {
-						$pending++;
-					}
+		// dispatchProduct() only writes reception lines and moves stock; the
+		// order status is advanced by Livraison() (needs the "receptionner"
+		// right, or reception.creer when the reception module is on).
+		// Must run ONCE, after the whole form was processed -- running it inside
+		// the $_POST loop would fire it again for every non-qty field (batch_,
+		// eatby_, sellby_, token, action...), repeating the summary message.
+		if ($receivedSomething) {
+			$order->fetch_lines();
+			$pending = 0;
+			foreach ($order->lines as $line) {
+				$got = pharmacy_received_qty($db, (int) $order->id, (int) $line->id);
+				if ($got + 0.0001 < (float) $line->qty) {
+					$pending++;
 				}
-				$type = $pending > 0 ? 'par' : 'tot';
-				$resL = $order->Livraison($user, dol_now(), $type, '');
-				if ($resL > 0) {
-					setEventMessages($langs->trans($type == 'tot' ? 'PharmacyDispatchDoneAll' : 'PharmacyDispatchDonePartially', $pending), null, 'mesgs');
-				} else {
-					setEventMessages($langs->trans('PharmacyDispatchStatusFail', $order->error), $order->errors, 'errors');
-				}
+			}
+			$type = $pending > 0 ? 'par' : 'tot';
+			$resL = $order->Livraison($user, dol_now(), $type, '');
+			if ($resL > 0) {
+				setEventMessages($langs->trans($type == 'tot' ? 'PharmacyDispatchDoneAll' : 'PharmacyDispatchDonePartially', $pending), null, 'mesgs');
+			} else {
+				setEventMessages($langs->trans('PharmacyDispatchStatusFail', $order->error), $order->errors, 'errors');
 			}
 		}
 	}
