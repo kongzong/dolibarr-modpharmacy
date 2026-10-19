@@ -89,7 +89,7 @@ class ActionsPharmacy
 				$out .= '<tr class="oddeven">';
 				$out .= '<td><a href="'.dol_buildpath('/pharmacy/card.php', 1).'?id='.((int) $s->rowid).'">'.dol_escape_htmltag($s->ref).'</a></td>';
 				$out .= '<td>'.dol_escape_htmltag((string) $s->warehouse_label).'</td>';
-				$out .= '<td>'.dol_print_date($this->db->jdate($s->date_creation), 'dayhour').'</td>';
+				$out .= '<td>'.dol_print_date($this->db->jdate($s->date_creation), '%Y-%m-%d %H:%M').'</td>';
 				$out .= '<td class="center">'.pharmacy_status_badge($s->status).'</td>';
 				$out .= '</tr>';
 			}

@@ -295,7 +295,7 @@ if (!empty($info)) {
 	}
 	foreach ($receipts as $r) {
 		print '<tr class="oddeven">';
-		print '<td class="center nowrap">'.dol_print_date($db->jdate($r->datec), 'dayhour').'</td>';
+		print '<td class="center nowrap">'.dol_print_date($db->jdate($r->datec), '%Y-%m-%d %H:%M').'</td>';
 		print '<td>'.dol_escape_htmltag((string) $r->supplier).'</td>';
 		print '<td>'.dol_escape_htmltag((string) $r->reception_ref).'</td>';
 		print '<td class="right">'.(float) $r->qty.'</td>';
@@ -324,7 +324,7 @@ if (!empty($info)) {
 	}
 	foreach ($issues as $r) {
 		print '<tr class="oddeven">';
-		print '<td class="center nowrap">'.($r->date_dispense ? dol_print_date($db->jdate($r->date_dispense), 'dayhour') : dol_print_date($db->jdate($r->datem), 'dayhour')).'</td>';
+		print '<td class="center nowrap">'.($r->date_dispense ? dol_print_date($db->jdate($r->date_dispense), '%Y-%m-%d %H:%M') : dol_print_date($db->jdate($r->datem), '%Y-%m-%d %H:%M')).'</td>';
 		if ($r->direction > 0) {
 			print '<td><span class="badge badge-status8">'.$langs->trans("PharmacyTraceMoveOut").'</span></td>';
 		} else {

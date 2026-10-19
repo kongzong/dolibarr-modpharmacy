@@ -260,7 +260,7 @@ class PharmacyRecall
 				return $ref;
 			}
 		}
-		return 'RC-'.$day.'-'.dol_print_date(dol_now(), 'dayhour');
+		return 'RC-'.$day.'-'.dol_print_date(dol_now(), '%Y-%m-%d %H:%M');
 	}
 
 	/* -------------------------------------------------------------------- read */

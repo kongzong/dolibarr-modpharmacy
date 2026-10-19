@@ -188,7 +188,7 @@ if ($action === 'export') {
 		));
 		foreach ($actions as $r) {
 			fputcsv($fh, array(
-				dol_print_date($db->jdate($r->date_creation), 'dayhour'),
+				dol_print_date($db->jdate($r->date_creation), '%Y-%m-%d %H:%M'),
 				pharmacy_expiry_op_label((string) $r->op),
 				trim($r->product_label.' ['.$r->product_ref.']'),
 				(string) $r->batch,
@@ -322,7 +322,7 @@ if (empty($actions)) {
 foreach ($actions as $r) {
 	$label = trim((string) $r->product_label.' ['.$r->product_ref.']');
 	print '<tr class="oddeven">';
-	print '<td class="center nowrap">'.dol_print_date($db->jdate($r->date_creation), 'dayhour').'</td>';
+	print '<td class="center nowrap">'.dol_print_date($db->jdate($r->date_creation), '%Y-%m-%d %H:%M').'</td>';
 	print '<td>'.pharmacy_expiry_op_label((string) $r->op).'</td>';
 	print '<td>'.dol_escape_htmltag($label).'</td>';
 	print '<td>'.dol_escape_htmltag((string) $r->batch).'</td>';

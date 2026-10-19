@@ -272,6 +272,7 @@ print $suppliers
 	? $form->selectarray('fk_soc', $suppliers, GETPOSTINT('fk_soc') > 0 ? GETPOSTINT('fk_soc') : 0, 1)
 	: '<span class="opacitymedium">'.$langs->trans('PharmacyPurchaseNoSupplier').'</span>';
 print '</td></tr></table>';
+print '<div class="opacitymedium marginbottomonly">'.dol_escape_htmltag($langs->trans('PharmacySuggestSupplierHint')).'</div>';
 
 print '<div class="div-table-responsive-no-min">';
 print '<table class="liste centpercent">';

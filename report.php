@@ -255,7 +255,7 @@ if ($action === 'exportdetail') {
 		foreach ($details as $r) {
 			fputcsv($fh, array(
 				(string) $r->ref,
-				$r->date_dispense ? dol_print_date($db->jdate($r->date_dispense), 'dayhour') : '',
+				$r->date_dispense ? dol_print_date($db->jdate($r->date_dispense), '%Y-%m-%d %H:%M') : '',
 				(string) $r->card_no,
 				(string) $r->patient_name,
 				(string) $r->product_ref,
@@ -416,7 +416,7 @@ if (empty($details)) {
 foreach ($details as $r) {
 	print '<tr class="oddeven">';
 	print '<td><a href="'.dol_buildpath('/pharmacy/card.php', 1).'?id='.((int) $r->rowid).'">'.dol_escape_htmltag($r->ref).'</a></td>';
-	print '<td class="center nowrap">'.($r->date_dispense ? dol_print_date($db->jdate($r->date_dispense), 'dayhour') : '').'</td>';
+	print '<td class="center nowrap">'.($r->date_dispense ? dol_print_date($db->jdate($r->date_dispense), '%Y-%m-%d %H:%M') : '').'</td>';
 	print '<td>'.dol_escape_htmltag((string) $r->patient_name).'</td>';
 	print '<td class="nowrap"><a href="'.dol_buildpath('/product/card.php', 1).'?id='.((int) $r->fk_product).'">'.dol_escape_htmltag((string) $r->llabel).'</a></td>';
 	print '<td class="right">'.number_format((float) $r->qty, 3).'</td>';

@@ -187,7 +187,7 @@ print '<div class="div-table-responsive">';
 print '<table class="noborder centpercent">';
 print '<tr class="liste_titre"><td colspan="4">'.$langs->trans('PharmacyRetailSearch').'</td></tr>';
 print '<tr><td class="fieldrequired">'.$langs->trans('Product').'</td>';
-print '<td><input type="text" name="q" class="minwidth300" value="'.dol_escape_htmltag($search).'"> <span class="opacitymedium">'.$langs->trans('PharmacyRetailBatchHint').'</span></td>';
+print '<td><input type="text" name="q" class="minwidth300" value="'.dol_escape_htmltag($search).'" autofocus placeholder="'.dol_escape_htmltag($langs->trans('Search')).'"> <span class="opacitymedium">'.$langs->trans('PharmacyRetailBatchHint').'</span></td>';
 print '<td colspan="2"><input type="submit" class="button" value="'.$langs->trans('Search').'"></td></tr>';
 print '</table></div></form>';
 

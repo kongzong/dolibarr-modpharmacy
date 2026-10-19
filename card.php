@@ -260,12 +260,12 @@ if ($hasPresc) {
 }
 print '</td></tr>';
 print '<tr><td>'.$langs->trans("PharmacyWarehouse").'</td><td>'.dol_escape_htmltag((string) $dao->warehouse_label).'</td></tr>';
-print '<tr><td>'.$langs->trans("PharmacyDateDispense").'</td><td>'.($dao->date_dispense ? dol_print_date($dao->date_dispense, 'dayhour') : '').'</td></tr>';
+print '<tr><td>'.$langs->trans("PharmacyDateDispense").'</td><td>'.($dao->date_dispense ? dol_print_date($dao->date_dispense, '%Y-%m-%d %H:%M') : '').'</td></tr>';
 if ((int) $dao->status === PHARMACY_STATUS_RETURNED) {
 	print '<tr><td>'.$langs->trans("PharmacyReturnReason").'</td><td>'.dol_escape_htmltag((string) $dao->return_reason).'</td></tr>';
 }
 print '<tr><td>'.$langs->trans("PharmacyNote").'</td><td>'.dol_escape_htmltag((string) $dao->note).'</td></tr>';
-print '<tr><td>'.$langs->trans("DateCreation").'</td><td>'.dol_print_date($dao->date_creation, 'dayhour').'</td></tr>';
+print '<tr><td>'.$langs->trans("DateCreation").'</td><td>'.dol_print_date($dao->date_creation, '%Y-%m-%d %H:%M').'</td></tr>';
 print '</table>';
 
 print '<div class="div-table-responsive-no-min"><table class="noborder centpercent">';

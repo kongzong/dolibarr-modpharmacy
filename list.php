@@ -123,7 +123,7 @@ if ($action === 'export') {
 				(string) $r->card_no,
 				(string) $r->patient_name,
 				(string) $r->warehouse_label,
-				$r->date_creation ? dol_print_date($db->jdate($r->date_creation), 'dayhour') : '',
+				$r->date_creation ? dol_print_date($db->jdate($r->date_creation), '%Y-%m-%d %H:%M') : '',
 				pharmacy_status_label((int) $r->status),
 			));
 		}
@@ -236,7 +236,7 @@ foreach ($rows as $r) {
 	print '<td>'.dol_escape_htmltag($r->card_no).'</td>';
 	print '<td><a href="'.dol_buildpath('/patient/card.php', 1).'?id='.(int) $r->fk_patient.'">'.dol_escape_htmltag($r->patient_name).'</a></td>';
 	print '<td>'.dol_escape_htmltag($r->warehouse_label !== null ? $r->warehouse_label : '').'</td>';
-	print '<td class="center">'.dol_print_date($db->jdate($r->date_creation), 'dayhour').'</td>';
+	print '<td class="center">'.dol_print_date($db->jdate($r->date_creation), '%Y-%m-%d %H:%M').'</td>';
 	print '<td class="center">'.pharmacy_status_badge($r->status).'</td>';
 	print '<td></td>';
 	print '</tr>';

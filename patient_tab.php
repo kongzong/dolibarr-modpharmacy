@@ -98,7 +98,7 @@ foreach ($rows as $r) {
 	print '<tr class="oddeven"'.((int) $r->status === PHARMACY_STATUS_RETURNED ? ' style="opacity:.55"' : '').'>';
 	print '<td><a href="'.dol_buildpath('/pharmacy/card.php', 1).'?id='.(int) $r->rowid.'">'.dol_escape_htmltag($r->ref).'</a></td>';
 	print '<td>'.($r->fk_prescription ? '<a href="'.dol_buildpath('/prescription/card.php', 1).'?id='.((int) $r->fk_prescription).'">'.dol_escape_htmltag($r->presc_ref).'</a>' : '').'</td>';
-	print '<td class="center">'.dol_print_date($db->jdate($r->date_creation), 'dayhour').'</td>';
+	print '<td class="center">'.dol_print_date($db->jdate($r->date_creation), '%Y-%m-%d %H:%M').'</td>';
 	$medHtml = '<span class="opacitymedium">—</span>';
 	if (!empty($r->fk_medrecord)) {
 		$medLabel = ($r->medrecord_ref !== null && $r->medrecord_ref !== '') ? $r->medrecord_ref : '#'.(int) $r->fk_medrecord;

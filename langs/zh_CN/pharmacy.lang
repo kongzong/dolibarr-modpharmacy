@@ -392,3 +392,4 @@ PharmacySuggestHint=目标水位 = 安全线 + 30天消耗（若设置了目标�
 PharmacyReportExportDetail=导出明细
 
 PharmacyReportColSheets=出库单数
+PharmacySuggestSupplierHint=供应商仅决定生成的采购单发往哪家；建议量按全公司在途采购订单与近30天消耗计算，与所选供应商无关。

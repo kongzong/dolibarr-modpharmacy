@@ -230,7 +230,7 @@ class PharmacyStockCount
 				return $ref;
 			}
 		}
-		return 'PD-'.$day.'-'.dol_print_date(dol_now(), 'dayhour');
+		return 'PD-'.$day.'-'.dol_print_date(dol_now(), '%Y-%m-%d %H:%M');
 	}
 
 	/* -------------------------------------------------------------------- read */

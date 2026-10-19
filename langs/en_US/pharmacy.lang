@@ -383,3 +383,4 @@ PharmacySuggestHint=Target = safety threshold + 30-day usage (or target stock wh
 PharmacyReportExportDetail=Export details
 
 PharmacyReportColSheets=Dispensing sheets
+PharmacySuggestSupplierHint=The supplier only decides where the generated purchase order is sent. Suggested quantities use company-wide open orders and 30-day usage, independent of the chosen supplier.
