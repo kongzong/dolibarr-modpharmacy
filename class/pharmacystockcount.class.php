@@ -195,7 +195,7 @@ class PharmacyStockCount
 			$this->refreshTotals();
 			$this->fetchLines();
 			return $countId;
-		} catch (Exception $e) {
+		} catch (Throwable $e) {
 			$this->rollbackAll();
 			$this->error = $e->getMessage();
 			return -1;
@@ -591,7 +591,7 @@ class PharmacyStockCount
 			$this->status = self::STATUS_POSTED;
 			$this->fk_user_valid = (int) $user->id;
 			return 1;
-		} catch (Exception $e) {
+		} catch (Throwable $e) {
 			$this->rollbackAll();
 			$this->error = $e->getMessage();
 			return -1;

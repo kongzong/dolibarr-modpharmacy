@@ -95,6 +95,7 @@ PharmacyErrConfirmFailed=确认发药失败
 PharmacyAuditDispense=发药
 PharmacyAuditReturn=退药
 PharmacyConfirmReturn=确认退回该发药单？将按原批次逆向入库并把处方退回"已签发"。
+PharmacyConfirmDispense=确认按当前数量发药并扣减库存？发药后如需撤回须走退回流程。
 Prescription=处方
 PharmacyRetail=零售销售
 PharmacyRetailSearch=产品搜索

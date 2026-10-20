@@ -449,7 +449,26 @@ class Dispense extends CommonObject
 			return -2;
 		}
 		$this->db->begin();
-		$sql = "SELECT rowid, is_stock FROM ".$this->db->prefix()."pharmacy_dispense_line";
+		// Lock the sheet row and re-check its status under lock: the in-memory
+		// status above was read outside any transaction, and a concurrent
+		// confirm() may flip 0 -> 1 between the page fetch and our UPDATE.
+		// Locking here serializes this change against confirm()'s idempotency
+		// gate, so a dispensed sheet can never have its quantities edited.
+		$sql = "SELECT status FROM ".$this->db->prefix()."pharmacy_dispense WHERE rowid = ".((int) $this->id)." FOR UPDATE";
+		$resql = $this->db->query($sql);
+		if (!$resql) {
+			$this->db->rollback();
+			$this->error = $this->db->lasterror();
+			return -3;
+		}
+		$rowSheet = $this->db->fetch_object($resql);
+		$this->db->free($resql);
+		if (!$rowSheet || (int) $rowSheet->status !== PHARMACY_STATUS_PENDING) {
+			$this->db->rollback();
+			$this->error = 'PharmacyErrQtyNotPending';
+			return -1;
+		}
+		$sql = "SELECT rowid, qty, is_stock FROM ".$this->db->prefix()."pharmacy_dispense_line";
 		$sql .= " WHERE rowid = ".((int) $lineId)." AND fk_dispense = ".((int) $this->id);
 		$resql = $this->db->query($sql);
 		if (!$resql) {
@@ -469,6 +488,7 @@ class Dispense extends CommonObject
 			$this->error = 'PharmacyErrQtyNonStock';
 			return -5;
 		}
+		$oldQty = (float) $obj->qty;
 		$sql = "UPDATE ".$this->db->prefix()."pharmacy_dispense_line SET qty = ".((float) $qty);
 		$sql .= " WHERE rowid = ".((int) $lineId)." AND fk_dispense = ".((int) $this->id);
 		if (!$this->db->query($sql)) {
@@ -476,6 +496,10 @@ class Dispense extends CommonObject
 			$this->error = $this->db->lasterror();
 			return -6;
 		}
+		// Audit the actual-quantity change (GSP trace: who moved the dispensed
+		// quantity away from the prescribed one, and by how much). Written
+		// inside the transaction so it commits/rolls back with the change.
+		patient_audit($this->db, $this->fk_patient, 'PHARMACY_QTY_UPDATE', $user, array('ref' => $this->ref, 'line' => (int) $lineId, 'old' => $oldQty, 'new' => (float) $qty));
 		$this->db->commit();
 		foreach ($this->lines as $k => $l) {
 			if ((int) $l['id'] === (int) $lineId) {
@@ -534,10 +558,23 @@ class Dispense extends CommonObject
 				throw new RuntimeException($this->db->lasterror());
 			}
 			if ($this->db->affected_rows($resql) < 1) {
-				// A concurrent writer dispensed between our fetch and the gate.
+				// Another writer changed the sheet between our fetch and the
+				// gate. Only a genuine concurrent dispense counts as idempotent
+				// success; a returned or otherwise-changed sheet must NOT
+				// report success (no stock moved for this call).
 				$this->db->rollback();
-				$this->status = PHARMACY_STATUS_DISPENSED;
-				return 1;
+				$sqlG = "SELECT status FROM ".$this->db->prefix()."pharmacy_dispense WHERE rowid = ".((int) $this->id);
+				$resG = $this->db->query($sqlG);
+				$rowG = $resG ? $this->db->fetch_object($resG) : null;
+				if ($resG) {
+					$this->db->free($resG);
+				}
+				if ($rowG && (int) $rowG->status === PHARMACY_STATUS_DISPENSED) {
+					$this->status = PHARMACY_STATUS_DISPENSED;
+					return 1; // idempotent: already dispensed by a concurrent writer
+				}
+				$this->error = 'PharmacyErrNotPending';
+				return -2;
 			}
 
 			// Stock movements + batch snapshot per stock line (FEFO).

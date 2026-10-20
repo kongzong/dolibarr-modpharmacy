@@ -99,6 +99,7 @@ PharmacyErrConfirmFailed=Failed to confirm the dispense
 PharmacyAuditDispense=Dispense
 PharmacyAuditReturn=Return
 PharmacyConfirmReturn=Return this dispense sheet? The batches are booked back in and the prescription returns to issued.
+PharmacyConfirmDispense=Confirm dispensing at the current quantities and deduct stock? To undo afterwards, use the return flow.
 Prescription=Prescription
 PharmacyRetail=Retail (OTC)
 PharmacyRetailSearch=Product search

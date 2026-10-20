@@ -152,7 +152,7 @@ if (($action == 'add' && GETPOST('token', 'alpha') != '' && GETPOSTINT('fk_presc
 }
 
 // ------------------------------------------------------------ confirm dispense
-if ($action == 'confirm_dispense' && $id > 0) {
+if ($action == 'confirm_dispense' && $confirm == 'yes' && $id > 0) {
 	if (!$user->hasRight('pharmacy', 'dispense')) {
 		accessforbidden();
 	}
@@ -337,7 +337,7 @@ if ($resBill) {
 // Actions (spec §3.4): confirm = dispense permission, return = return permission
 print '<div class="tabsAction">';
 if ((int) $dao->status === PHARMACY_STATUS_PENDING && $user->hasRight('pharmacy', 'dispense')) {
-	print dolGetButtonAction($langs->trans("PharmacyConfirm"), '', 'default', $_SERVER["PHP_SELF"].'?id='.$dao->id.'&action=confirm_dispense&token='.newToken(), '', 1);
+	print dolGetButtonAction($langs->trans("PharmacyConfirm"), '', 'default', $_SERVER["PHP_SELF"].'?id='.$dao->id.'&action=dispense&token='.newToken(), '', 1);
 }
 if ((int) $dao->status === PHARMACY_STATUS_DISPENSED && $user->hasRight('pharmacy', 'return')) {
 	print dolGetButtonAction($langs->trans("PharmacyReturn"), '', 'delete', $_SERVER["PHP_SELF"].'?id='.$dao->id.'&action=return&token='.newToken(), '', 1);
@@ -352,6 +352,13 @@ if ((int) $dao->status !== PHARMACY_STATUS_PENDING) {
 	print dolGetButtonAction($langs->trans("PharmacyLabelPrint"), '', 'default', dol_buildpath('/pharmacy/label.php', 1).'?id='.$dao->id, '', 1, array('attr' => array('target' => '_blank')));
 }
 print '</div>';
+
+// Dispense now goes through the same confirm dialog as return: it is an
+// irreversible stock move, a plain GET link could fire on a misclick (and
+// browsers may prefetch the full URL, token included).
+if ($action == 'dispense' && (int) $dao->status === PHARMACY_STATUS_PENDING && $user->hasRight('pharmacy', 'dispense')) {
+	print $form->formconfirm($_SERVER["PHP_SELF"].'?id='.$dao->id, $langs->trans("PharmacyConfirm"), $langs->trans("PharmacyConfirmDispense"), 'confirm_dispense', array(), 0, 1);
+}
 
 if ($action == 'return' && (int) $dao->status === PHARMACY_STATUS_DISPENSED && $user->hasRight('pharmacy', 'return')) {
 	print $form->formconfirm($_SERVER["PHP_SELF"].'?id='.$dao->id, $langs->trans("PharmacyReturn"), $langs->trans("PharmacyConfirmReturn"), 'confirm_return', array(array('type' => 'text', 'name' => 'reason', 'label' => $langs->trans("PharmacyReturnReason"), 'value' => '', 'size' => 60)), 0, 1);
