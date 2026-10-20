@@ -152,7 +152,7 @@ if (($action == 'add' && GETPOST('token', 'alpha') != '' && GETPOSTINT('fk_presc
 }
 
 // ------------------------------------------------------------ confirm dispense
-if ($action == 'confirm_dispense' && $confirm == 'yes' && $id > 0) {
+if ($action == 'confirm_dispense' && $confirm == 'yes' && GETPOST('token', 'alpha') != '' && $id > 0) {
 	if (!$user->hasRight('pharmacy', 'dispense')) {
 		accessforbidden();
 	}
@@ -172,7 +172,7 @@ if ($action == 'confirm_dispense' && $confirm == 'yes' && $id > 0) {
 }
 
 // ------------------------------------------------------------ return
-if ($action == 'confirm_return' && $id > 0 && $confirm == 'yes') {
+if ($action == 'confirm_return' && $id > 0 && $confirm == 'yes' && GETPOST('token', 'alpha') != '') {
 	if (!$user->hasRight('pharmacy', 'return')) {
 		accessforbidden();
 	}
